@@ -1,7 +1,7 @@
 # ---- Build stage: composer dependencies -------------------------------
 FROM php:8.4-cli-alpine AS build
 
-ARG MONGODB_EXT_VERSION=2.1.0
+ARG MONGODB_EXT_VERSION=2.5.2
 
 WORKDIR /app
 
@@ -17,7 +17,7 @@ RUN set -e \
 COPY composer.json composer.lock ./
 
 RUN apk add --no-cache --virtual .build-deps autoconf build-base openssl-dev curl \
-  && pecl install "mongodb-${MONGODB_EXT_VERSION}" \
+  && (ok=0; for i in 1 2 3; do pecl -q install "mongodb-${MONGODB_EXT_VERSION}" && { ok=1; break; } || sleep 5; done; [ -n "$ok" ]) \
   && docker-php-ext-enable mongodb \
   && curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer \
   && composer --version
@@ -28,10 +28,10 @@ RUN composer install --no-dev --no-interaction --no-progress
 # ---- Runtime stage: nginx + php-fpm, non-root ---------------------------
 FROM php:8.4-fpm-alpine
 
-ARG MONGODB_EXT_VERSION=2.1.0
+ARG MONGODB_EXT_VERSION=2.5.2
 
 RUN apk add --no-cache --virtual .build-deps autoconf build-base openssl-dev \
-  && pecl install "mongodb-${MONGODB_EXT_VERSION}" \
+  && (ok=0; for i in 1 2 3; do pecl -q install "mongodb-${MONGODB_EXT_VERSION}" && { ok=1; break; } || sleep 5; done; [ -n "$ok" ]) \
   && docker-php-ext-enable mongodb \
   && apk del .build-deps \
   && apk add --no-cache nginx supervisor \
