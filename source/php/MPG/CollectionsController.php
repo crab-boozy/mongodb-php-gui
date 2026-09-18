@@ -9,7 +9,8 @@ class CollectionsController extends Controller {
         AuthController::ensureUserIsLogged();
         
         return new ViewResponse(200, 'manageCollections', [
-            'databaseNames' => DatabasesController::getDatabaseNames()
+            'databaseNames' => DatabasesController::getDatabaseNames(),
+            'viewName' => 'manageCollections'
         ]);
 
     }
@@ -33,12 +34,12 @@ class CollectionsController extends Controller {
 
             $collectionNames = [];
 
-            foreach ($database->listCollections() as $collectionInfo) {
+            foreach ($database->listCollections(['maxTimeMS' => AppConfig::queryMaxTimeMs()]) as $collectionInfo) {
                 $collectionNames[] = $collectionInfo['name'];
             }
 
         } catch (\Throwable $th) {
-            return new JsonResponse(500, ErrorNormalizer::normalize($th, __METHOD__));
+            return new JsonResponse(self::errorStatus($th), ErrorNormalizer::normalize($th, __METHOD__));
         }
 
         sort($collectionNames);
@@ -66,9 +67,11 @@ class CollectionsController extends Controller {
 
             // TODO: Check createCollection result?
             $database->createCollection($decodedRequestBody['collectionName']);
+            Audit::success('collection.create', $decodedRequestBody['databaseName'], $decodedRequestBody['collectionName']);
 
         } catch (\Throwable $th) {
-            return new JsonResponse(500, ErrorNormalizer::normalize($th, __METHOD__));
+            Audit::error('collection.create', $decodedRequestBody['databaseName'] ?? '', $decodedRequestBody['collectionName'] ?? null);
+            return new JsonResponse(self::errorStatus($th), ErrorNormalizer::normalize($th, __METHOD__));
         }
         
         return new JsonResponse(200, true);
@@ -97,9 +100,11 @@ class CollectionsController extends Controller {
                 'to' => $decodedRequestBody['databaseName'] . '.'
                     . $decodedRequestBody['newCollectionName']
             ]);
+            Audit::success('collection.rename', $decodedRequestBody['databaseName'], $decodedRequestBody['oldCollectionName']);
 
         } catch (\Throwable $th) {
-            return new JsonResponse(500, ErrorNormalizer::normalize($th, __METHOD__));
+            Audit::error('collection.rename', $decodedRequestBody['databaseName'] ?? '', $decodedRequestBody['oldCollectionName'] ?? null);
+            return new JsonResponse(self::errorStatus($th), ErrorNormalizer::normalize($th, __METHOD__));
         }
 
         return new JsonResponse(200, true);
@@ -125,9 +130,11 @@ class CollectionsController extends Controller {
 
             // TODO: Check drop result?
             $collection->drop();
+            Audit::success('collection.drop', $decodedRequestBody['databaseName'], $decodedRequestBody['collectionName']);
 
         } catch (\Throwable $th) {
-            return new JsonResponse(500, ErrorNormalizer::normalize($th, __METHOD__));
+            Audit::error('collection.drop', $decodedRequestBody['databaseName'] ?? '', $decodedRequestBody['collectionName'] ?? null);
+            return new JsonResponse(self::errorStatus($th), ErrorNormalizer::normalize($th, __METHOD__));
         }
 
         return new JsonResponse(200, true);
@@ -148,10 +155,12 @@ class CollectionsController extends Controller {
                 $decodedRequestBody['databaseName'], $decodedRequestBody['collectionName']
             );
 
-            $documents = $collection->find([], ['limit' => 1])->toArray();
+            $documents = $collection->find(
+                [], ['limit' => 1, 'maxTimeMS' => AppConfig::queryMaxTimeMs()]
+            )->toArray();
 
         } catch (\Throwable $th) {
-            return new JsonResponse(500, ErrorNormalizer::normalize($th, __METHOD__));
+            return new JsonResponse(self::errorStatus($th), ErrorNormalizer::normalize($th, __METHOD__));
         }
 
         if ( empty($documents) ) {

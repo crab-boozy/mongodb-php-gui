@@ -3,3 +3,7 @@ node_modules/
 package-lock.json
 *.wip
 Plan.md
+
+# optional corporate CAs for the build (build-certs/)
+build-certs/*
+!build-certs/.gitkeep

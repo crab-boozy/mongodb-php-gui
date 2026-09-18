@@ -32,19 +32,31 @@ class DocumentsController extends Controller {
         if ( isset($_FILES['import']) && isset($_FILES['import']['tmp_name'])
             && isset($_POST['database_name']) && isset($_POST['collection_name']) ) {
 
-                try {
+                if ( !is_uploaded_file($_FILES['import']['tmp_name'])
+                    || (int) ($_FILES['import']['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK ) {
+                    $errorMessage = 'Impossible to upload the import file.';
+                } elseif ( (int) ($_FILES['import']['size'] ?? 0) > AppConfig::maxImportSize() ) {
+                    $errorMessage = 'Import file is above the size limit.';
+                } else {
 
-                    $importedDocumentsCount = self::importFromFile(
-                        $_FILES['import']['tmp_name'],
-                        $_POST['database_name'],
-                        $_POST['collection_name']
-                    );
+                    try {
 
-                    $successMessage = $importedDocumentsCount . ' document(s) imported in '; 
-                    $successMessage .= $_POST['collection_name'] . '.';
+                        $importedDocumentsCount = self::importFromFile(
+                            $_FILES['import']['tmp_name'],
+                            $_POST['database_name'],
+                            $_POST['collection_name']
+                        );
 
-                } catch (\Throwable $th) {
-                    $errorMessage = $th->getMessage();
+                        Audit::success('document.import', (string) $_POST['database_name'], (string) $_POST['collection_name']);
+
+                        $successMessage = $importedDocumentsCount . ' document(s) imported in ';
+                        $successMessage .= $_POST['collection_name'] . '.';
+
+                    } catch (\Throwable $th) {
+                        Audit::error('document.import', (string) $_POST['database_name'], (string) $_POST['collection_name']);
+                        $errorMessage = $th->getMessage();
+                    }
+
                 }
 
         }
@@ -53,7 +65,8 @@ class DocumentsController extends Controller {
             'databaseNames' => DatabasesController::getDatabaseNames(),
             'maxFileSize' => ini_get('upload_max_filesize'),
             'successMessage' => $successMessage,
-            'errorMessage' => $errorMessage
+            'errorMessage' => $errorMessage,
+            'viewName' => 'importDocuments'
         ]);
 
     }
@@ -76,6 +89,14 @@ class DocumentsController extends Controller {
 
         if ( is_null($documents) ) {
             throw new \Exception('Import file is invalid... Malformed JSON?');
+        }
+
+        if ( !is_array($documents) ) {
+            throw new \Exception('Import file must be a JSON array of documents.');
+        }
+
+        if ( count($documents) > AppConfig::maxImportDocuments() ) {
+            throw new \Exception('Import file contains too many documents.');
         }
 
         foreach ($documents as &$document) {
@@ -109,7 +130,8 @@ class DocumentsController extends Controller {
         AuthController::ensureUserIsLogged();
         
         return new ViewResponse(200, 'queryDocuments', [
-            'databaseNames' => DatabasesController::getDatabaseNames()
+            'databaseNames' => DatabasesController::getDatabaseNames(),
+            'viewName' => 'queryDocuments'
         ]);
 
     }
@@ -148,7 +170,7 @@ class DocumentsController extends Controller {
             $insertOneResult = $collection->insertOne($decodedRequestBody['document']);
 
         } catch (\Throwable $th) {
-            return new JsonResponse(500, ErrorNormalizer::normalize($th, __METHOD__));
+            return new JsonResponse(self::errorStatus($th), ErrorNormalizer::normalize($th, __METHOD__));
         }
 
         return new JsonResponse(200, $insertOneResult->getInsertedCount());
@@ -184,10 +206,12 @@ class DocumentsController extends Controller {
                 $decodedRequestBody['databaseName'], $decodedRequestBody['collectionName']
             );
 
-            $count = $collection->countDocuments($decodedRequestBody['filter']);
+            $count = $collection->countDocuments(
+                $decodedRequestBody['filter'], ['maxTimeMS' => AppConfig::queryMaxTimeMs()]
+            );
 
         } catch (\Throwable $th) {
-            return new JsonResponse(500, ErrorNormalizer::normalize($th, __METHOD__));
+            return new JsonResponse(self::errorStatus($th), ErrorNormalizer::normalize($th, __METHOD__));
         }
 
         return new JsonResponse(200, $count);
@@ -224,9 +248,11 @@ class DocumentsController extends Controller {
             );
 
             $deleteOneResult = $collection->deleteOne($decodedRequestBody['filter']);
+            Audit::success('document.delete_one', $decodedRequestBody['databaseName'], $decodedRequestBody['collectionName']);
 
         } catch (\Throwable $th) {
-            return new JsonResponse(500, ErrorNormalizer::normalize($th, __METHOD__));
+            Audit::error('document.delete_one', $decodedRequestBody['databaseName'] ?? '', $decodedRequestBody['collectionName'] ?? null);
+            return new JsonResponse(self::errorStatus($th), ErrorNormalizer::normalize($th, __METHOD__));
         }
 
         return new JsonResponse(200, $deleteOneResult->getDeletedCount());
@@ -246,9 +272,17 @@ class DocumentsController extends Controller {
 
         if ( isset($decodedRequestBody['filter']['_id'])
             && preg_match(MongoDBHelper::OBJECT_ID_REGEX, $decodedRequestBody['filter']['_id']) ) {
-                $decodedRequestBody['filter']['_id'] =
-                    new \MongoDB\BSON\ObjectId($decodedRequestBody['filter']['_id']);
+            $decodedRequestBody['filter']['_id'] =
+                new \MongoDB\BSON\ObjectId($decodedRequestBody['filter']['_id']);
         }
+
+        try {
+            $findOptions = self::normalizeFindOptions($decodedRequestBody['options'] ?? []);
+        } catch (\InvalidArgumentException $th) {
+            return new JsonResponse(400, ErrorNormalizer::normalize($th, __METHOD__));
+        }
+
+        $findOptions['maxTimeMS'] = AppConfig::queryMaxTimeMs();
 
         try {
 
@@ -263,11 +297,11 @@ class DocumentsController extends Controller {
             );
 
             $documents = $collection->find(
-                $decodedRequestBody['filter'], $decodedRequestBody['options']
+                $decodedRequestBody['filter'], $findOptions
             )->toArray();
 
         } catch (\Throwable $th) {
-            return new JsonResponse(500, ErrorNormalizer::normalize($th, __METHOD__));
+            return new JsonResponse(self::errorStatus($th), ErrorNormalizer::normalize($th, __METHOD__));
         }
 
         foreach ($documents as &$document) {
@@ -322,12 +356,84 @@ class DocumentsController extends Controller {
             $updateResult = $collection->updateOne(
                 $decodedRequestBody['filter'], $decodedRequestBody['update']
             );
+            Audit::success('document.update_one', $decodedRequestBody['databaseName'], $decodedRequestBody['collectionName']);
 
         } catch (\Throwable $th) {
-            return new JsonResponse(500, ErrorNormalizer::normalize($th, __METHOD__));
+            Audit::error('document.update_one', $decodedRequestBody['databaseName'] ?? '', $decodedRequestBody['collectionName'] ?? null);
+            return new JsonResponse(self::errorStatus($th), ErrorNormalizer::normalize($th, __METHOD__));
         }
 
         return new JsonResponse(200, $updateResult->getModifiedCount());
+
+    }
+
+    /**
+     * Normalizes user-provided find options: only whitelisted keys with
+     * validated types are passed to the driver, limit is clamped by config.
+     *
+     * @throws \InvalidArgumentException
+     */
+    private static function normalizeFindOptions($userOptions) : array {
+
+        if ( !is_array($userOptions) ) {
+            throw new \InvalidArgumentException('Invalid options.');
+        }
+
+        $options = [];
+
+        // Absent limit means the default page size, never an unbounded scan.
+        $options['limit'] = self::normalizeLimit($userOptions['limit'] ?? null);
+
+        if ( isset($userOptions['skip']) ) {
+            if ( !is_int($userOptions['skip']) || $userOptions['skip'] < 0 ) {
+                throw new \InvalidArgumentException('Invalid skip.');
+            }
+            $options['skip'] = $userOptions['skip'];
+        }
+
+        if ( isset($userOptions['sort']) ) {
+            if ( !is_array($userOptions['sort']) ) {
+                throw new \InvalidArgumentException('Invalid sort.');
+            }
+            $options['sort'] = $userOptions['sort'];
+        }
+
+        if ( isset($userOptions['projection']) ) {
+            if ( !is_array($userOptions['projection']) ) {
+                throw new \InvalidArgumentException('Invalid projection.');
+            }
+            $options['projection'] = $userOptions['projection'];
+        }
+
+        return $options;
+
+    }
+
+    /**
+     * Limit contract: absent/null/0 -> default page;
+     * valid integer or digit string -> clamped to [1, max];
+     * negative or junk -> rejected.
+     *
+     * @throws \InvalidArgumentException
+     */
+    private static function normalizeLimit($limit) : int {
+
+        if ( is_null($limit) || $limit === 0 || $limit === '0' ) {
+            return AppConfig::defaultDocuments();
+        }
+
+        if ( is_string($limit) ) {
+            if ( !preg_match('/^\d+$/', $limit) ) {
+                throw new \InvalidArgumentException('Invalid limit.');
+            }
+            $limit = (int) $limit;
+        }
+
+        if ( !is_int($limit) || $limit < 1 ) {
+            throw new \InvalidArgumentException('Invalid limit.');
+        }
+
+        return min($limit, AppConfig::maxDocuments());
 
     }
 

@@ -4,6 +4,7 @@
 
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="mpg-csrf-token" content="<?= \MPG\Csrf::token() ?>">
 
     <title>MongoDB PHP GUI v<?php echo MPG\VERSION; ?></title>
 
@@ -63,13 +64,13 @@
 
                     <div class="col-md-12">
                         
-                        <div id="mpg-import-notice" class="alert alert-info" role="alert">Imported docs are appended. Max file size: <?php echo $maxFileSize; ?></div>
+                        <div id="mpg-import-notice" class="alert alert-info" role="alert">Imported docs are appended. Max file size: <?php echo htmlspecialchars($maxFileSize, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); ?></div>
                         
                         <?php
                         if ( !empty($successMessage) ) :
                         ?>
                             <h2>Result</h2>
-                            <div class="alert alert-success" role="alert">Success: <?php echo $successMessage; ?></div>
+                            <div class="alert alert-success" role="alert">Success: <?php echo htmlspecialchars($successMessage, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); ?></div>
                         <?php
                         endif;
                         ?>
@@ -78,7 +79,7 @@
                         if ( !empty($errorMessage) ) :
                         ?>
                             <h2>Result</h2>
-                            <div class="alert alert-danger" role="alert">Error: <?php echo $errorMessage; ?></div>
+                            <div class="alert alert-danger" role="alert">Error: <?php echo htmlspecialchars($errorMessage, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); ?></div>
                         <?php
                         endif;
                         ?>
@@ -86,6 +87,7 @@
                         <form id="mpg-import-form" method="POST" enctype="multipart/form-data">
 
                             <input id="mpg-import-file" type="file" accept=".json" name="import" class="form-control-file d-inline align-middle">
+                            <input type="hidden" name="csrf_token" value="<?= \MPG\Csrf::token() ?>">
 
                             <input type="hidden" name="database_name" value="">
                             <input type="hidden" name="collection_name" value="">

@@ -4,6 +4,7 @@
 
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="mpg-csrf-token" content="<?= \MPG\Csrf::token() ?>">
 
     <title>MongoDB PHP GUI v<?php echo MPG\VERSION; ?></title>
 
@@ -21,7 +22,6 @@
 
     <script src="./assets/js/codemirror.min.js"></script>
     <script src="./assets/js/codemirror-js-mode.js"></script>
-    <script src="./assets/js/codemirror-sql-mode.js"></script>
     <script src="./assets/js/codemirror-show-hint.min.js"></script>
     <script src="./assets/js/codemirror-mpg-hint.js"></script>
     <script src="./assets/js/jsonic.min.js"></script>
@@ -105,7 +105,7 @@
                         <div class="form-group">
 
                             <div>
-                                Limit <input id="mpg-limit-input" type="number" class="form-control" value="5" min="1">
+                                Limit <input id="mpg-limit-input" type="number" class="form-control" value="5" min="1" max="<?= \MPG\AppConfig::maxDocuments() ?>">
                             </div>
                             
                             <div>

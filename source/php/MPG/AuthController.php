@@ -29,6 +29,7 @@ class AuthController extends Controller {
             } else {
 
                 $_SESSION['mpg']['user_is_logged'] = true;
+                session_regenerate_id(true);
                 Routes::redirectTo('/');
 
             }
@@ -47,7 +48,14 @@ class AuthController extends Controller {
         if ( isset($_POST['uri']) ) {
 
             if ( preg_match(MongoDBHelper::URI_REGEX, $_POST['uri']) ) {
-                $_SESSION['mpg']['mongodb_uri'] = $_POST['uri'];
+
+                try {
+                    AppConfig::assertMongoUriAllowed($_POST['uri']);
+                    $_SESSION['mpg']['mongodb_uri'] = $_POST['uri'];
+                } catch (\InvalidArgumentException) {
+                    $requiredFields[] = 'Host not allowed';
+                }
+
             } else {
                 $requiredFields[] = 'URI';
             }
@@ -64,6 +72,16 @@ class AuthController extends Controller {
     
             if ( !empty($_POST['host']) ) {
                 $_SESSION['mpg']['mongodb_host'] = $_POST['host'];
+
+                try {
+                    $host = AppConfig::extractHost($_POST['host']);
+                    if ( !AppConfig::isHostAllowed($host) ) {
+                        $requiredFields[] = 'Host not allowed';
+                    }
+                } catch (\InvalidArgumentException) {
+                    $requiredFields[] = 'Host not allowed';
+                }
+
             } else {
                 $requiredFields[] = 'Host';
             }

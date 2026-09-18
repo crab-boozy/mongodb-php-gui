@@ -19,7 +19,7 @@ class ViewResponse extends Response {
      */
     private static function render(string $viewName, array $viewData) : string {
 
-        extract($viewData);
+        extract($viewData, EXTR_SKIP);
 
         ob_start();
         require ABS_PATH . '/views/' . $viewName . '.view.php';

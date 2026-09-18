@@ -32,14 +32,27 @@ MPG.reloadUsers = function(databaseName) {
                     userRoles.push(userRole.role + ' (' + userRole.db + ')');
                 });
 
-                var userDropButton = '<button'
-                + ' data-user-name="' + userInfo.user + '"'
-                    + ' class="mpg-drop-user-button btn btn-danger">'
-                        + 'Drop user</button>';
+                var tableRow = document.createElement('tr');
 
-                usersTableBody.innerHTML += '<tr><td>' + userInfo.user + '</td>'
-                    + '<td>' + userRoles.join(', ') + '</td>'
-                        + '<td>' + userDropButton + '</td></tr>';
+                var userNameCell = document.createElement('td');
+                userNameCell.textContent = userInfo.user;
+                tableRow.appendChild(userNameCell);
+
+                var userRolesCell = document.createElement('td');
+                userRolesCell.textContent = userRoles.join(', ');
+                tableRow.appendChild(userRolesCell);
+
+                var actionCell = document.createElement('td');
+
+                var userDropButton = document.createElement('button');
+                userDropButton.setAttribute('data-user-name', userInfo.user);
+                userDropButton.className = 'mpg-drop-user-button btn btn-danger';
+                userDropButton.textContent = 'Drop user';
+                actionCell.appendChild(userDropButton);
+
+                tableRow.appendChild(actionCell);
+
+                usersTableBody.appendChild(tableRow);
 
             });
 

@@ -8,14 +8,16 @@ class Routes {
 
     public static function setPrefix() {
 
-        // If request matches a folder. For example: /mongo/
-        if ( preg_match('#/$#', $_SERVER['REQUEST_URI']) ) {
+        $requestUri = (string) ($_SERVER['REQUEST_URI'] ?? '/');
 
-            $prefix = $_SERVER['REQUEST_URI'];
+        // If request matches a folder. For example: /mongo/
+        if ( preg_match('#/$#', $requestUri) ) {
+
+            $prefix = $requestUri;
 
         } else {
 
-            $prefix = dirname($_SERVER['REQUEST_URI']);
+            $prefix = dirname($requestUri);
 
             // Normalize directory separator in request path.
             if ( DIRECTORY_SEPARATOR !== '/' ) {
@@ -24,7 +26,16 @@ class Routes {
 
         }
 
-        self::$prefix = rtrim($prefix, '/');
+        $prefix = rtrim($prefix, '/');
+
+        // Open-redirect guard: the prefix must stay a plain single-slash
+        // path - no empty segments (//evil.com), no control characters.
+        if ( $prefix !== ''
+            && !preg_match('#^/(?:[^/\x00-\x1F]+/)*[^/\x00-\x1F]+$#', $prefix) ) {
+            $prefix = '';
+        }
+
+        self::$prefix = $prefix;
 
     }
 

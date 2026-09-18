@@ -14,17 +14,15 @@ MPG.codeMirror = null;
 MPG.queryHistory = [];
 
 /**
- * List of MongoDB and SQL keywords.
+ * List of MongoDB keywords.
  * XXX Used for autocompletion.
- * 
+ *
  * @type {Array}
  */
-MPG.mongoDBAndSQLKeywords = [
+MPG.mongoDBKeywords = [
 
     '$eq', '$gt', '$gte', '$in', '$lt', '$lte', '$ne', '$nin',
-    '$and', '$not', '$nor', '$or', '$exists', '$type',
-
-    'SELECT', 'FROM', 'WHERE', 'IN', 'LIKE', 'AND', 'NOT', 'OR'
+    '$and', '$not', '$nor', '$or', '$exists', '$type'
 
 ];
 
@@ -61,6 +59,8 @@ MPG.initializeCodeMirror = function() {
         document.querySelector('#mpg-filter-or-doc-textarea')
     );
 
+    MPG.codeMirror.setOption('mode', 'javascript');
+
     var historyPopButton = document.createElement('button');
     
     historyPopButton.className = 'mpg-history-pop-button';
@@ -78,40 +78,6 @@ MPG.initializeCodeMirror = function() {
 MPG.helpers.isXsDevice = function() {
 
     return window.matchMedia('(max-width: 576px)').matches;
-
-};
-
-/**
- * Converts a SQL query to a MongoDB query.
- * 
- * @param {string} sql
- * @param {function} successCallback
- * 
- * @returns {void}
- */
-MPG.helpers.convertSQLToMongoDBQuery = function(sql, successCallback) {
-
-    if ( /GROUP BY/i.test(sql) ) {
-        MPG.codeMirror.setValue(sql);
-        return window.alert('SQL GROUP BY clause is not supported.');
-    }
-
-    if ( /ORDER BY/i.test(sql) ) {
-        MPG.codeMirror.setValue(sql);
-        return window.alert('SQL ORDER BY clause is not supported.');
-    }
-
-    if ( /LIMIT/i.test(sql) ) {
-        MPG.codeMirror.setValue(sql);
-        return window.alert('SQL LIMIT clause is not supported.');
-    }
-
-    MPG.helpers.doAjaxRequest(
-        'POST',
-        './convertSQLToMongoDBQuery',
-        successCallback,
-        JSON.stringify({ "sql": sql })
-    );
 
 };
 
@@ -274,12 +240,14 @@ MPG.eventListeners.addCollections = function() {
                     });
 
                     var sortSelect = document.querySelector('#mpg-sort-select');
-                    sortSelect.innerHTML = '';
+                    sortSelect.length = 0;
 
                     MPG.collectionFields.forEach(function(collectionField) {
 
-                        sortSelect.innerHTML += '<option value="' + collectionField + '">'
-                            + collectionField + '</option>';
+                        var option = document.createElement('option');
+                        option.value = collectionField;
+                        option.textContent = collectionField;
+                        sortSelect.appendChild(option);
 
                     });
 
@@ -546,26 +514,6 @@ MPG.eventListeners.addUpdate = function() {
 };
 
 /**
- * Adds an event listener on "CodeMirror" change.
- * 
- * @returns {void}
- */
-MPG.eventListeners.addCodeMirror = function() {
-
-    MPG.codeMirror.on('change', function() {
-
-        // If Filter or Document text area contains SQL:
-        if ( /^SELECT/i.test(MPG.codeMirror.getValue()) ) {
-            MPG.codeMirror.setOption('mode', 'sql');
-        } else {
-            MPG.codeMirror.setOption('mode', 'javascript');
-        }
-
-    });
-    
-};
-
-/**
  * Adds an event listener on "History pop" button.
  * 
  * @returns {void}
@@ -610,25 +558,6 @@ MPG.eventListeners.addFind = function() {
         MPG.codeMirror.save();
 
         var filterOrDocTextAreaValue = document.querySelector('#mpg-filter-or-doc-textarea').value;
-
-        // If Filter or Document text area contains SQL:
-        if ( /^SELECT/i.test(filterOrDocTextAreaValue) ) {
-
-            MPG.codeMirror.setValue('');
-            MPG.codeMirror.save();
-            
-            return MPG.helpers.convertSQLToMongoDBQuery(filterOrDocTextAreaValue,
-                function(response) {
-
-                    MPG.codeMirror.setValue(JSON.parse(response));
-                    MPG.codeMirror.save();
-
-                    document.querySelector('#mpg-find-button').click();
-
-                }
-            );
-
-        }
 
         var requestBody = {
             'databaseName': MPG.databaseName,
@@ -769,7 +698,6 @@ window.addEventListener('DOMContentLoaded', function(_event) {
     MPG.eventListeners.addInsertOne();
     MPG.eventListeners.addCount();
     MPG.eventListeners.addDeleteOne();
-    MPG.eventListeners.addCodeMirror();
     MPG.eventListeners.addHistoryPop();
     MPG.eventListeners.addFind();
     MPG.eventListeners.addKeyShortcuts();
