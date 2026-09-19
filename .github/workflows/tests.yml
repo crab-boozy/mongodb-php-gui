@@ -1,0 +1,23 @@
+
+name: Tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Build image
+      run: docker build -t mongodb-php-gui-app:tests .
+
+    - name: Run test suite
+      run: |
+        docker run --rm --entrypoint php \
+          -v "$PWD/tests":/app/tests \
+          mongodb-php-gui-app:tests /app/tests/csrf_routes_test.php
