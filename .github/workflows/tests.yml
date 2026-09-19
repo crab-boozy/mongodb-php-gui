@@ -86,9 +86,18 @@ jobs:
         [ "$failures" -eq 0 ] || exit 1
         echo "all E2E mutations are audited"
 
+    - name: Publish test results
+      if: always() && hashFiles('test-results/*.xml') != ''
+      uses: dorny/test-reporter@v2
+      with:
+        name: Test suite
+        path: test-results/*.xml
+        reporter: java-junit
+        fail-on-error: false
+
     - name: Upload test results
       if: always()
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v5
       with:
         name: test-results
         path: test-results/*.xml
