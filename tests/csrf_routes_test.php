@@ -12,6 +12,16 @@
  *   3. POST with valid header token  -> pass CSRF (200 on /login);
  *   4. POST with valid form field    -> pass CSRF (200 on /login);
  *   5. header + field with different values -> 403.
+ *
+ * Additionally:
+ *   6. failed login re-renders the form with a non-empty token;
+ *   7. MongoURI/host parser: seed lists, allowlist boundaries, port range,
+ *      SRV strictness.
+ *
+ * The successful-login lifecycle (token rotation -> next request renders a
+ * fresh token -> POST with it passes CSRF) exits the PHP process via
+ * header()+exit in Routes::redirectTo, so it cannot be asserted in-process;
+ * it is verified by the live HTTP regression (login -> GET -> POST /countDocuments).
  */
 
 namespace MPG;
@@ -37,6 +47,14 @@ define('VERSION', 'test');
 if ( !defined('ABS_PATH') ) {
     define('ABS_PATH', __DIR__ . '/..');
 }
+
+// Allowlist fixtures used by the parser checks below (AppConfig caches its
+// config on first access, so the env must be set before any dispatch).
+putenv('MPG_ALLOWED_MONGODB_HOSTS=127.0.0.1');
+putenv('MPG_ALLOWED_MONGODB_DOMAINS=example.com');
+
+// A real (file-based) session so session_regenerate_id() works in CLI.
+session_start();
 
 $routesFile = __DIR__ . '/../routes.php';
 $router = require $routesFile;
@@ -141,6 +159,107 @@ $_POST = ['csrf_token' => str_repeat('0', 64)];
 $request = $factory->createServerRequest('POST', 'http://localhost/findDocuments');
 $response = $application->dispatch($request);
 $check('/findDocuments with forged token -> ' . $response->getStatusCode() . ' (403 expected)', $response->getStatusCode() === 403);
+
+// Capsule BufferStream is not seekable - cast once, never rewind.
+$bodyOf = static function($response) : string {
+    return (string) $response->getBody();
+};
+
+$metaTokenOf = static function(string $html) : string {
+    if ( preg_match('/<meta name="mpg-csrf-token" content="([0-9a-f]+)"/', $html, $m) ) {
+        return $m[1];
+    }
+    return '';
+};
+
+// --- Failed login must re-render a live form (non-empty token). ------------
+// (The successful-login lifecycle - token rotation, fresh token on the next
+// request, POST with it passing CSRF - exits the PHP process inside
+// Routes::redirectTo and is verified by the live HTTP regression instead.)
+echo "== Failed login keeps the form alive ==\n";
+
+$_POST = [];
+$request = $factory->createServerRequest('GET', 'http://localhost/login');
+$tokenBefore = $metaTokenOf($bodyOf($application->dispatch($request)));
+
+$_POST = [
+    'csrf_token' => $tokenBefore,
+    'uri' => 'not a uri',
+];
+
+$request = $factory->createServerRequest('POST', 'http://localhost/login');
+$response = $application->dispatch($request);
+$failedLoginHtml = $bodyOf($response);
+$tokenAfterFail = $metaTokenOf($failedLoginHtml);
+$check('failed login -> ' . $response->getStatusCode() . ' (200 expected)', $response->getStatusCode() === 200);
+$check('failed login re-renders a non-empty CSRF token', $tokenAfterFail !== '');
+
+// --- MongoURI/host parser: seeds, boundaries, ports, SRV. ------------------
+echo "== MongoURI / host parser checks ==\n";
+
+$hosts = AppConfig::extractMongoHosts(
+    'mongodb://mongo1.example.com:27017,mongo2.example.com:27017,mongo3.example.com:27017/?replicaSet=rs0'
+);
+$check('rs seed list -> 3 hosts', $hosts === ['mongo1.example.com', 'mongo2.example.com', 'mongo3.example.com']);
+
+try {
+    AppConfig::assertMongoUriAllowed(
+        'mongodb://mongo1.example.com:27017,mongo2.example.com:27017,mongo3.example.com:27017/?replicaSet=rs0'
+    );
+    $check('rs seed list passes allowlist', true);
+} catch (\InvalidArgumentException $e) {
+    $check('rs seed list passes allowlist', false);
+}
+
+// notallowed.org is outside the example.com allowlist; one bad seed must
+// reject the whole seed list. (evil.example.com would be allowed - it is a
+// real subdomain of example.com.)
+try {
+    AppConfig::assertMongoUriAllowed('mongodb://mongo1.example.com:27017,notallowed.org:27017');
+    $check('rs with disallowed seed rejected', false);
+} catch (\InvalidArgumentException $e) {
+    $check('rs with disallowed seed rejected', true);
+}
+
+$check('srv parses single authority', AppConfig::extractMongoHosts('mongodb+srv://cluster.example.com/?replicaSet=rs0') === ['cluster.example.com']);
+
+$check('exact host allowed', AppConfig::isHostAllowed('127.0.0.1'));
+$check('subdomain allowed', AppConfig::isHostAllowed('mongo.example.com'));
+$check('case-insensitive host allowed', AppConfig::isHostAllowed('FOO.EXAMPLE.COM'));
+$check('trailing dot normalized', AppConfig::isHostAllowed('foo.example.com.'));
+$check('evil-example.com rejected', !AppConfig::isHostAllowed('evil-example.com'));
+$check('example.com.evil.com rejected', !AppConfig::isHostAllowed('example.com.evil.com'));
+
+$check('port 1 accepted', AppConfig::extractHost('mongo.example.com:1') === 'mongo.example.com');
+$check('port 65535 accepted', AppConfig::extractHost('mongo.example.com:65535') === 'mongo.example.com');
+
+$portRejected = static function(string $seed) : bool {
+    try {
+        AppConfig::extractHost($seed);
+        return false;
+    } catch (\InvalidArgumentException $e) {
+        return true;
+    }
+};
+
+$check('port 0 rejected', $portRejected('mongo.example.com:0'));
+$check('port 65536 rejected', $portRejected('mongo.example.com:65536'));
+$check('port 999999 rejected', $portRejected('mongo.example.com:999999'));
+$check('ipv6 port accepted', AppConfig::extractHost('[::1]:27017') === '::1');
+$check('ipv6 port out of range rejected', $portRejected('[::1]:65536'));
+
+$srvRejected = static function(string $seed) : bool {
+    try {
+        AppConfig::extractHost($seed, true);
+        return false;
+    } catch (\InvalidArgumentException $e) {
+        return true;
+    }
+};
+
+$check('srv with port rejected', $srvRejected('foo.example.com:27017'));
+$check('srv with comma rejected', $srvRejected('foo.example.com,evil.com'));
+$check('plain srv accepted', AppConfig::extractHost('foo.example.com', true) === 'foo.example.com');
 
 // ---------------------------------------------------------------------------
 if ( $failures > 0 ) {

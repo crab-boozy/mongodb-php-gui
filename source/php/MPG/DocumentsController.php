@@ -168,8 +168,10 @@ class DocumentsController extends Controller {
             );
 
             $insertOneResult = $collection->insertOne($decodedRequestBody['document']);
+            Audit::success('document.insert_one', $decodedRequestBody['databaseName'], $decodedRequestBody['collectionName']);
 
         } catch (\Throwable $th) {
+            Audit::error('document.insert_one', $decodedRequestBody['databaseName'] ?? '', $decodedRequestBody['collectionName'] ?? null);
             return new JsonResponse(self::errorStatus($th), ErrorNormalizer::normalize($th, __METHOD__));
         }
 

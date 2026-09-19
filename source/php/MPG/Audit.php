@@ -14,6 +14,7 @@ class Audit {
      */
     private const OPERATIONS = [
         'document.delete_one' => true,
+        'document.insert_one' => true,
         'document.update_one' => true,
         'document.import'     => true,
         'collection.create'   => true,

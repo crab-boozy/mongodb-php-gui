@@ -100,6 +100,8 @@ spec:
               mountPath: /var/lib/supervisor
             - name: runtime-config
               mountPath: /app/config/runtime
+            - name: tmp
+              mountPath: /tmp
       volumes:
         - name: php-data
           emptyDir: {}
@@ -110,4 +112,8 @@ spec:
         - name: supervisor-data
           emptyDir: {}
         - name: runtime-config
+          emptyDir: {}
+        # PHP upload temp dir: with readOnlyRootFilesystem the default /tmp
+        # would be read-only and /importDocuments uploads would fail.
+        - name: tmp
           emptyDir: {}

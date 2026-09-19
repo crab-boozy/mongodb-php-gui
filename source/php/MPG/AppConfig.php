@@ -214,7 +214,7 @@ class AppConfig {
             }
             $host = substr($seed, 1, $closeBracket - 1);
             $portPart = substr($seed, $closeBracket + 1);
-            if ( $portPart !== '' && !preg_match('/^\d+$/', ltrim($portPart, ':')) ) {
+            if ( $portPart !== '' && !self::isValidPort(ltrim($portPart, ':')) ) {
                 throw new \InvalidArgumentException('Invalid MongoDB host.');
             }
             return $host;
@@ -222,7 +222,7 @@ class AppConfig {
 
         $colonPosition = strpos($seed, ':');
         if ( $colonPosition !== false ) {
-            if ( !preg_match('/^\d+$/', substr($seed, $colonPosition + 1)) ) {
+            if ( !self::isValidPort(substr($seed, $colonPosition + 1)) ) {
                 throw new \InvalidArgumentException('Invalid MongoDB host.');
             }
             return substr($seed, 0, $colonPosition);
@@ -257,6 +257,18 @@ class AppConfig {
         }
 
         return $host;
+
+    }
+
+    private static function isValidPort(string $port) : bool {
+
+        if ( !preg_match('/^\d+$/', $port) ) {
+            return false;
+        }
+
+        $value = (int) $port;
+
+        return $value >= 1 && $value <= 65535;
 
     }
 

@@ -154,6 +154,24 @@ class MongoDBHelper {
     }
 
     /**
+     * Drops the cached client of the current session (logout).
+     *
+     * Every successful login rotates the session id, so a re-login always
+     * gets a fresh client via the new cache key; without this cleanup the
+     * previous connection (its topology and credentials) would keep living
+     * in the long-lived FPM worker memory until pm.max_requests recycling.
+     */
+    public static function clearClient() : void {
+
+        $sessionId = session_id();
+
+        if ( isset(self::$clients[$sessionId]) ) {
+            unset(self::$clients[$sessionId]);
+        }
+
+    }
+
+    /**
      * Creates a MongoDB Regex from a string.
      * 
      * @throws \Exception

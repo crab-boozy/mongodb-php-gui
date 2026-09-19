@@ -14,6 +14,7 @@ mkdir -p "$RUNTIME_DIR/php" "$RUNTIME_DIR/nginx"
 cat > "$RUNTIME_DIR/php/mpg.ini" <<EOF
 upload_max_filesize = ${MAX_IMPORT_SIZE}
 post_max_size = ${POST_MAX_SIZE}
+upload_tmp_dir = /tmp
 session.save_path = /var/lib/php/sessions
 session.use_strict_mode = 1
 display_errors = 0
@@ -127,12 +128,14 @@ EOF
 # baked into the image. Recreate what nginx needs (idempotent locally):
 # the temp dirs for `nginx -t`, and the default-error-log symlink to stderr
 # (nginx opens it before the config above is read, so no log file on disk).
-mkdir -p /var/lib/nginx/logs \
+mkdir -p /var/lib/php/sessions \
+         /var/lib/nginx/logs \
          /var/lib/nginx/tmp/client_body \
          /var/lib/nginx/tmp/proxy \
          /var/lib/nginx/tmp/fastcgi \
          /var/lib/nginx/tmp/uwsgi \
          /var/lib/nginx/tmp/scgi
+chmod 700 /var/lib/php/sessions
 if [ ! -e /var/lib/nginx/logs/error.log ]; then
     ln -sf /dev/stderr /var/lib/nginx/logs/error.log
 fi
