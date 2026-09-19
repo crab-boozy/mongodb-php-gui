@@ -98,19 +98,30 @@ The application is hardened:
 
 ## Tests
 
-Security regression suite (CSRF chokepoint on all POST routes, failed-login form, MongoDB URI/allowlist validation, credential masking in error output, audit log format, open-redirect prefix guard, find-options validation, session/client cleanup):
+Two suites, both executed on every push/PR by the `Tests` GitHub workflow:
+
+**In-process regression suite** — runs without a live MongoDB (CSRF chokepoint on all POST routes, failed-login form, MongoDB URI/allowlist validation, credential masking in error output, audit log format, open-redirect prefix guard, find-options validation, session/client cleanup):
 
 ```
 docker run --rm --entrypoint php -v "$PWD/tests":/app/tests mongodb-php-gui:latest /app/tests/csrf_routes_test.php
 ```
 
-The suite runs in-process, without a live MongoDB. It is executed on every push/PR by the `Tests` GitHub workflow.
+**E2E suite** (`tests/e2e_test.php`) — drives the full application (nginx + PHP-FPM + a live `mongo:7` provided by the workflow) over real HTTP: the successful-login lifecycle (session/CSRF rotation), insert/count/find/update/delete, multipart import, index lifecycle and the audit trail. Locally, with your own app instance (e.g. compose on port 8080) and a local MongoDB:
+
+```
+docker run -d --name mpg-mongo -p 27017:27017 mongo:7
+docker run --rm --network host --entrypoint php \
+  -e MPG_TEST_MONGO_URI=mongodb://127.0.0.1:27017 \
+  -e MPG_E2E_BASE_URL=http://127.0.0.1:8080 \
+  -v "$PWD/tests":/app/tests mongodb-php-gui:latest /app/tests/e2e_test.php
+```
+
+Without `MPG_TEST_MONGO_URI` the E2E suite prints `SKIP` and exits 0.
 
 ### Manual checks
 
-Before a rollout, walk through these scenarios once against a real deployment:
+The login lifecycle is covered automatically by the E2E suite. Before a rollout, walk through these scenarios once against a real deployment:
 
-- [ ] **Login lifecycle** — log in, then run a query in the same (rotated) session; the fresh `<meta name="mpg-csrf-token">` must be accepted by a `POST`.
 - [ ] **Replica-set failover** — log in with a multi-seed URI (`mongodb://rs1:27017,rs2:27017,rs3:27017/?replicaSet=rs0`), stop the PRIMARY, and verify the next query still succeeds.
 - [ ] **Upload limits** — a ~9 MiB JSON import succeeds; a ~10.5 MiB file is rejected with an HTTP 413 JSON body (application guard); a ~13 MiB file is rejected with an HTTP 413 HTML body (nginx).
 - [ ] **Read-only root filesystem** — run with `--read-only` plus tmp volumes for `/var/lib/php`, `/var/lib/nginx` and `/tmp` (or the Kubernetes manifests with their emptyDirs); login and import must work.

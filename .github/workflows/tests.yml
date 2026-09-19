@@ -10,14 +10,64 @@ jobs:
 
     runs-on: ubuntu-latest
 
+    services:
+      mongo:
+        image: mongo:7
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'quit(db.adminCommand({ping:1}).ok ? 0 : 1)'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
     - uses: actions/checkout@v5
 
     - name: Build image
       run: docker build -t mongodb-php-gui-app:tests .
 
-    - name: Run test suite
+    - name: Run in-process test suite
       run: |
         docker run --rm --entrypoint php \
           -v "$PWD/tests":/app/tests \
           mongodb-php-gui-app:tests /app/tests/csrf_routes_test.php
+
+    - name: Start application container
+      run: |
+        docker run -d --name mpg-e2e --network host \
+          -e MPG_ALLOWED_MONGODB_HOSTS=127.0.0.1 \
+          mongodb-php-gui-app:tests
+
+        for i in $(seq 1 30); do
+          if curl -fsS http://127.0.0.1:8080/ready >/dev/null 2>&1; then
+            echo "application is ready"
+            break
+          fi
+          sleep 1
+        done
+
+        curl -fsS http://127.0.0.1:8080/ready
+
+    - name: Run E2E test suite (live MongoDB)
+      run: |
+        docker run --rm --network host --entrypoint php \
+          -e MPG_TEST_MONGO_URI=mongodb://127.0.0.1:27017 \
+          -e MPG_E2E_BASE_URL=http://127.0.0.1:8080 \
+          -v "$PWD/tests":/app/tests \
+          mongodb-php-gui-app:tests /app/tests/e2e_test.php
+
+    - name: Verify E2E mutations reached the audit log
+      run: |
+        docker logs mpg-e2e > /tmp/mpg-audit.log 2>&1
+        for op in collection.create document.insert_one document.update_one document.delete_one document.import collection.drop; do
+          if ! grep -q "MPG audit | op=$op db=mpgtest coll=t8 result=success" /tmp/mpg-audit.log; then
+            echo "missing audit line for $op"
+            exit 1
+          fi
+        done
+        echo "all E2E mutations are audited"
+
+    - name: Stop application container
+      if: always()
+      run: docker rm -f mpg-e2e || true
