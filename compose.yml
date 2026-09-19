@@ -7,11 +7,6 @@ services:
           path: ./assets
           target: /app/assets
         - action: sync
-          path: ./extras
-          target: /app/extras
-          ignore:
-            - dataset/
-        - action: sync
           path: ./source
           target: /app/source
         - action: sync

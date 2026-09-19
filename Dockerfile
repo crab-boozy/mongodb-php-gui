@@ -23,7 +23,9 @@ RUN apk add --no-cache --virtual .build-deps autoconf build-base openssl-dev cur
   && composer --version
 
 COPY . /app/
-RUN composer install --no-dev --no-interaction --no-progress
+RUN composer install --no-dev --no-interaction --no-progress \
+  # Keep local build-only CAs out of the runtime stage.
+  && rm -rf /app/build-certs
 
 # ---- Runtime stage: nginx + php-fpm, non-root ---------------------------
 FROM php:8.4-fpm-alpine
