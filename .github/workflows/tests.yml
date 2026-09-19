@@ -70,16 +70,16 @@ jobs:
         cases=""
         for op in collection.create document.insert_one document.update_one document.delete_one document.import collection.drop; do
           if grep -q "MPG audit | op=$op db=mpgtest coll=t8 result=success" /tmp/mpg-audit.log; then
-            cases="$cases  <testcase name=\"audit: $op\"/>"$'\n'
+            cases="$cases  <testcase name=\"audit: $op\" time=\"0\"/>"$'\n'
           else
             failures=$((failures + 1))
-            cases="$cases  <testcase name=\"audit: $op\"><failure message=\"missing audit line\"/></testcase>"$'\n'
+            cases="$cases  <testcase name=\"audit: $op\" time=\"0\"><failure message=\"missing audit line\"/></testcase>"$'\n'
             echo "missing audit line for $op"
           fi
         done
         {
           echo '<?xml version="1.0" encoding="UTF-8"?>'
-          echo "<testsuite name=\"audit\" tests=\"6\" failures=\"$failures\">"
+          echo "<testsuite name=\"audit\" tests=\"6\" failures=\"$failures\" time=\"0\">"
           printf '%s' "$cases"
           echo '</testsuite>'
         } > test-results/junit-audit.xml
