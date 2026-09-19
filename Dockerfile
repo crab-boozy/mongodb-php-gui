@@ -45,6 +45,13 @@ COPY --from=build --chown=mpg:mpg /app /app/
 RUN chown -R mpg:mpg /app /var/lib/php /var/lib/nginx /var/lib/supervisor \
   && chmod 700 /var/lib/php/sessions \
   && chmod +x /app/config/entrypoint.sh \
+  # nginx opens its compiled-in default error log before parsing the runtime
+  # config (where error_log is /dev/stderr). Point that path at /dev/stderr
+  # via a symlink so no log file is ever created on disk.
+  && rm -f /var/lib/nginx/logs \
+  && mkdir -p /var/lib/nginx/logs \
+  && ln -sf /dev/stderr /var/lib/nginx/logs/error.log \
+  && chown -R mpg:mpg /var/lib/nginx/logs \
   && rm -f /var/log/*.log
 
 # PHP scans the runtime ini directory (populated by the entrypoint) in

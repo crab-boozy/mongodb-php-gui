@@ -123,6 +123,20 @@ http {
 }
 EOF
 
+# In k8s /var/lib/nginx is an emptyDir, wiping the package-provided layout
+# baked into the image. Recreate what nginx needs (idempotent locally):
+# the temp dirs for `nginx -t`, and the default-error-log symlink to stderr
+# (nginx opens it before the config above is read, so no log file on disk).
+mkdir -p /var/lib/nginx/logs \
+         /var/lib/nginx/tmp/client_body \
+         /var/lib/nginx/tmp/proxy \
+         /var/lib/nginx/tmp/fastcgi \
+         /var/lib/nginx/tmp/uwsgi \
+         /var/lib/nginx/tmp/scgi
+if [ ! -e /var/lib/nginx/logs/error.log ]; then
+    ln -sf /dev/stderr /var/lib/nginx/logs/error.log
+fi
+
 nginx -t -c "$RUNTIME_DIR/nginx/nginx.conf"
 
 exec /usr/bin/supervisord -c /app/config/supervisor/supervisord.conf
