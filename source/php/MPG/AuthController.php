@@ -29,6 +29,11 @@ class AuthController extends Controller {
             } else {
 
                 $_SESSION['mpg']['user_is_logged'] = true;
+                session_regenerate_id(true);
+                // Rotate the CSRF token with the session: the new session
+                // never carries a token that was valid before login
+                // (login CSRF fixation).
+                $_SESSION['mpg']['csrf_token'] = bin2hex(random_bytes(32));
                 Routes::redirectTo('/');
 
             }
@@ -39,15 +44,39 @@ class AuthController extends Controller {
 
     }
 
+    /**
+     * Wipes the per-user (Mongo) session state while preserving the CSRF
+     * token: without this, the login view re-rendered in the same request
+     * (failed login) would show an empty token and the form would be dead.
+     */
+    private function resetSessionState() : void {
+
+        $csrfToken = $_SESSION['mpg']['csrf_token'] ?? null;
+
+        $_SESSION['mpg'] = [];
+
+        if ( $csrfToken !== null ) {
+            $_SESSION['mpg']['csrf_token'] = $csrfToken;
+        }
+
+    }
+
     private function processFormData() : array {
 
         $requiredFields = [];
-        $_SESSION['mpg'] = [];
+        $this->resetSessionState();
 
         if ( isset($_POST['uri']) ) {
 
             if ( preg_match(MongoDBHelper::URI_REGEX, $_POST['uri']) ) {
-                $_SESSION['mpg']['mongodb_uri'] = $_POST['uri'];
+
+                try {
+                    AppConfig::assertMongoUriAllowed($_POST['uri']);
+                    $_SESSION['mpg']['mongodb_uri'] = $_POST['uri'];
+                } catch (\InvalidArgumentException) {
+                    $requiredFields[] = 'Host not allowed';
+                }
+
             } else {
                 $requiredFields[] = 'URI';
             }
@@ -64,6 +93,16 @@ class AuthController extends Controller {
     
             if ( !empty($_POST['host']) ) {
                 $_SESSION['mpg']['mongodb_host'] = $_POST['host'];
+
+                try {
+                    $host = AppConfig::extractHost($_POST['host']);
+                    if ( !AppConfig::isHostAllowed($host) ) {
+                        $requiredFields[] = 'Host not allowed';
+                    }
+                } catch (\InvalidArgumentException) {
+                    $requiredFields[] = 'Host not allowed';
+                }
+
             } else {
                 $requiredFields[] = 'Host';
             }
@@ -86,7 +125,8 @@ class AuthController extends Controller {
 
     public function logout() {
 
-        $_SESSION['mpg'] = [];
+        MongoDBHelper::clearClient();
+        $this->resetSessionState();
 
         Routes::redirectTo('/login');
 

@@ -69,6 +69,17 @@ MPG.helpers.doAjaxRequest = function(method, url, successCallback, body) {
     });
 
     xhr.open(method, url);
+
+    if ( method.toUpperCase() === 'POST' ) {
+
+        var csrfMeta = document.querySelector('meta[name="mpg-csrf-token"]');
+
+        if ( csrfMeta && csrfMeta.content !== '' ) {
+            xhr.setRequestHeader('X-CSRF-Token', csrfMeta.content);
+        }
+
+    }
+
     xhr.send(body);
 
 };
@@ -150,20 +161,30 @@ MPG.helpers.completeNavLinks = function(urlFragment) {
  */
 MPG.helpers.escapeHTML = function(html) {
 
-    return html.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    return html
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
 
 };
 
 /**
  * Unescapes HTML tags and entities.
- * 
+ *
  * @param {string} html
- * 
+ *
  * @returns {string}
  */
 MPG.helpers.unescapeHTML = function(html) {
 
-    return html.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
+    return html
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;/g, "'")
+        .replace(/&amp;/g, '&');
 
 };
 
@@ -183,21 +204,30 @@ MPG.reloadCollections = function(databaseName) {
 
             var collectionsList = document.querySelector('#mpg-collections-list');
 
-            collectionsList.innerHTML = '';
+            collectionsList.textContent = '';
             MPG.collectionName = '';
 
             JSON.parse(response).forEach(function(collectionName) {
 
-                collectionsList.innerHTML +=
-                    '<li class="collection-name">'
-                        + '<i class="fa fa-file-text" aria-hidden="true"></i> '
-                        + '<a class="mpg-collection-link" '
-                        + 'data-collection-name="' + collectionName
-                        + '" href="#' + MPG.databaseName + '/' + collectionName + '">'
-                        + collectionName
-                        + '</a>'
-                    + '</li>';
-                
+                var listItem = document.createElement('li');
+                listItem.className = 'collection-name';
+
+                var icon = document.createElement('i');
+                icon.className = 'fa fa-file-text';
+                icon.setAttribute('aria-hidden', 'true');
+
+                var collectionLink = document.createElement('a');
+                collectionLink.className = 'mpg-collection-link';
+                collectionLink.setAttribute('data-collection-name', collectionName);
+                collectionLink.setAttribute('href', '#' + MPG.databaseName + '/' + collectionName);
+                collectionLink.textContent = collectionName;
+
+                listItem.appendChild(icon);
+                listItem.appendChild(document.createTextNode(' '));
+                listItem.appendChild(collectionLink);
+
+                collectionsList.appendChild(listItem);
+
             });
 
             MPG.eventListeners.addCollections();

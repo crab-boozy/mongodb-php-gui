@@ -49,11 +49,15 @@ class MongoDBHelper {
     public const REGEX = '#^/(.+)/([igmsuy]*)$#';
 
     /**
-     * MongoDB client singleton instance.
-     * 
-     * @var null|MongoDB\Client
+     * MongoDB clients, keyed by session id.
+     *
+     * A FPM worker serves many sessions over its lifetime; a single
+     * process-wide client would leak user A's connection (database,
+     * topology, credentials) into user B's requests on the same worker.
+     *
+     * @var array<string, MongoDB\Client>
      */
-    private static $client;
+    private static $clients = [];
 
     /**
      * Creates a MongoDB client.
@@ -95,22 +99,75 @@ class MongoDBHelper {
 
         }
 
-        return new Client($clientUri);
+        // Defense in depth: the URI lives in the session, so the allowlist
+        // is re-checked before every client creation.
+        if ( isset($_SESSION['mpg']['mongodb_uri']) ) {
+
+            try {
+                AppConfig::assertMongoUriAllowed($_SESSION['mpg']['mongodb_uri']);
+            } catch (\InvalidArgumentException $exception) {
+                throw new \Exception($exception->getMessage());
+            }
+
+        } else {
+
+            try {
+                $host = AppConfig::extractHost($_SESSION['mpg']['mongodb_host']);
+                if ( !AppConfig::isHostAllowed($host) ) {
+                    throw new \InvalidArgumentException('Host not allowed: ' . $host);
+                }
+            } catch (\InvalidArgumentException $exception) {
+                $message = str_starts_with($exception->getMessage(), 'Host not allowed')
+                    ? $exception->getMessage()
+                    : 'Invalid host.';
+                throw new \Exception($message);
+            }
+
+        }
+
+        return new Client($clientUri, [
+            'serverSelectionTimeoutMS' => AppConfig::serverSelectionTimeoutMs(),
+            'connectTimeoutMS' => AppConfig::connectTimeoutMs(),
+            'socketTimeoutMS' => AppConfig::socketTimeoutMs(),
+        ]);
 
     }
 
     /**
-     * Gets MongoBD client singleton instance.
-     * 
+     * Gets the MongoDB client for the current session.
+     *
+     * Note: clients are kept per worker process; bounded recycling of
+     * workers (pm.max_requests) keeps their count in check.
+     *
      * @return MongoDB\Client
      */
     public static function getClient() : Client {
 
-        if ( is_null(self::$client) ) {
-            self::$client = self::createClient();  
+        $sessionId = session_id();
+
+        if ( !isset(self::$clients[$sessionId]) ) {
+            self::$clients[$sessionId] = self::createClient();
         }
 
-        return self::$client;
+        return self::$clients[$sessionId];
+
+    }
+
+    /**
+     * Drops the cached client of the current session (logout).
+     *
+     * Every successful login rotates the session id, so a re-login always
+     * gets a fresh client via the new cache key; without this cleanup the
+     * previous connection (its topology and credentials) would keep living
+     * in the long-lived FPM worker memory until pm.max_requests recycling.
+     */
+    public static function clearClient() : void {
+
+        $sessionId = session_id();
+
+        if ( isset(self::$clients[$sessionId]) ) {
+            unset(self::$clients[$sessionId]);
+        }
 
     }
 

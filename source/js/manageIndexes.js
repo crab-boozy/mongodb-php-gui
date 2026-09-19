@@ -47,10 +47,20 @@ MPG.reloadCollectionFields = function() {
         
             MPG.collectionFields.forEach(function(collectionField) {
         
-                indexableFieldsList.innerHTML += '<li><input type="checkbox"'
-                    + ' class="mpg-collection-field-checkbox"'
-                        + (( collectionField === '_id' ) ? ' disabled' : '')
-                            + ' value="' + collectionField + '"> ' + collectionField + ' </li>';
+                var listItem = document.createElement('li');
+
+                var checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.className = 'mpg-collection-field-checkbox';
+                checkbox.value = collectionField;
+                if ( collectionField === '_id' ) {
+                    checkbox.disabled = true;
+                }
+
+                listItem.appendChild(checkbox);
+                listItem.appendChild(document.createTextNode(' ' + collectionField + ' '));
+
+                indexableFieldsList.appendChild(listItem);
         
             });
 
@@ -83,35 +93,49 @@ MPG.reloadCollectionIndexes = function() {
             indexesTableBody.innerHTML = '';
             
             MPG.collectionIndexes.forEach(function(collectionIndex) {
-                
-                var collectionIndexKeysHtml = '';
-                
+
+                var tableRow = document.createElement('tr');
+
+                var nameCell = document.createElement('td');
+                nameCell.textContent = collectionIndex.name;
+                tableRow.appendChild(nameCell);
+
+                var keysCell = document.createElement('td');
+
                 for (var collectionIndexKey in collectionIndex.keys) {
-        
+
                     if ( !collectionIndex.keys.hasOwnProperty(collectionIndexKey) ) {
                         continue;
                     }
-        
+
                     var collectionIndexOrder = ' (ASC) ';
-        
+
                     if ( collectionIndex.keys[collectionIndexKey] === -1 ) {
                         collectionIndexOrder = ' (DESC) ';
                     }
-        
-                    collectionIndexKeysHtml += collectionIndexKey + collectionIndexOrder;
-        
+
+                    keysCell.appendChild(document.createTextNode(collectionIndexKey + collectionIndexOrder));
+
                 }
-                
-                var collectionIndexDropButton = '<button'
-                    + ' data-index-name="' + collectionIndex.name + '"'
-                        + ' class="mpg-index-drop-button btn btn-danger">'
-                            + 'Drop index</button>';
-                
-                indexesTableBody.innerHTML += '<tr><td>' + collectionIndex.name + '</td>'
-                    + '<td>' + collectionIndexKeysHtml + '</td>'
-                        + '<td>' + (collectionIndex.isUnique ? 'Yes' : 'No') + '</td>'
-                            + '<td>' + collectionIndexDropButton + '</td></tr>';
-                
+
+                tableRow.appendChild(keysCell);
+
+                var isUniqueCell = document.createElement('td');
+                isUniqueCell.textContent = ( collectionIndex.isUnique ? 'Yes' : 'No' );
+                tableRow.appendChild(isUniqueCell);
+
+                var actionCell = document.createElement('td');
+
+                var collectionIndexDropButton = document.createElement('button');
+                collectionIndexDropButton.setAttribute('data-index-name', collectionIndex.name);
+                collectionIndexDropButton.className = 'mpg-index-drop-button btn btn-danger';
+                collectionIndexDropButton.textContent = 'Drop index';
+                actionCell.appendChild(collectionIndexDropButton);
+
+                tableRow.appendChild(actionCell);
+
+                indexesTableBody.appendChild(tableRow);
+
             });
 
             MPG.eventListeners.addDropIndex();
@@ -252,7 +276,7 @@ MPG.eventListeners.addCreateIndex = function() {
                 var indexCreatedText = document.querySelector('#mpg-index-created .text');
 
                 indexCreated.classList.remove('d-none');
-                indexCreatedText.innerHTML
+                indexCreatedText.textContent
                     = 'Success: Index created with name ' + response + '.';
 
                 MPG.reloadCollectionIndexes();

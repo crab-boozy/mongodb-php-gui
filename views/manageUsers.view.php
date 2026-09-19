@@ -4,6 +4,7 @@
 
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="mpg-csrf-token" content="<?= \MPG\Csrf::token() ?>">
 
     <title>MongoDB PHP GUI v<?php echo MPG\VERSION; ?></title>
 
@@ -131,7 +132,7 @@
                         <label>Database</label>
                         <select id="mpg-user-role-database" class="form-control">
                             <?php foreach ($databaseNames as $databaseName) : ?>
-                            <option value="<?php echo $databaseName; ?>"><?php echo $databaseName; ?></option>
+                            <option value="<?php echo htmlspecialchars($databaseName, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); ?>"><?php echo htmlspecialchars($databaseName, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); ?></option>
                             <?php endforeach; ?>
                         </select>
 

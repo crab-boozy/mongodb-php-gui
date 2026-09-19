@@ -2,5 +2,15 @@ docs/
 tests/
 .git/
 .gitignore
-.htaccess
+.github/
 Dockerfile
+Plan.md
+node_modules/
+extras/
+copy-vendor.sh
+compose.yml
+k8s/
+.eslintrc.json
+package.json
+package-lock.json
+.dockerignore

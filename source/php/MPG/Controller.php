@@ -5,6 +5,16 @@ namespace MPG;
 class Controller {
 
     /**
+     * Maps a caught exception to an HTTP status: expired sessions
+     * surface as 401, everything else stays a server error.
+     */
+    public static function errorStatus(\Throwable $th) : int {
+
+        return str_starts_with($th->getMessage(), 'Session expired') ? 401 : 500;
+
+    }
+
+    /**
      * If it exists: returns request body.
      * 
      * @return string|null

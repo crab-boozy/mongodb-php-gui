@@ -4,6 +4,7 @@
 
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="mpg-csrf-token" content="<?= \MPG\Csrf::token() ?>">
     <meta name="robots" content="noindex">
 
     <title>MongoDB PHP GUI</title>
@@ -34,7 +35,7 @@
         ?>
 
             <div class="alert alert-danger text-center" role="alert">
-                Please fill these fields: <?php echo join(', ', $requiredFields); ?>
+                Please fill these fields: <?php echo htmlspecialchars(join(', ', $requiredFields), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); ?>
             </div>
 
         <?php
@@ -58,6 +59,7 @@
 
                             <div class="input-group form-group">
                                 <input type="url" class="form-control" placeholder="mongodb://user:pass@host:port/db" title="URI" name="uri" pattern="^mongodb(\+srv)?://.+$" required>
+                            <input type="hidden" name="csrf_token" value="<?= \MPG\Csrf::token() ?>">
                             </div>
 
                             <button class="btn mpg-flip-card-button text-info font-weight-bold float-left">I don't have an URI</button>
@@ -116,6 +118,7 @@
                                     <span class="input-group-text"><i class="fa fa-database"></i></span>
                                 </div>
                                 <input type="text" class="form-control" placeholder="Database" name="database">
+                                <input type="hidden" name="csrf_token" value="<?= \MPG\Csrf::token() ?>">
                             </div>
 
                             <button class="btn mpg-flip-card-button text-info font-weight-bold float-left">I have an URI</button>

@@ -13,7 +13,7 @@ class DatabasesController extends Controller {
         } else {
 
             try {
-                foreach (MongoDBHelper::getClient()->listDatabases() as $databaseInfo) {
+                foreach (MongoDBHelper::getClient()->listDatabases(['maxTimeMS' => AppConfig::queryMaxTimeMs()]) as $databaseInfo) {
                     $databaseNames[] = $databaseInfo['name'];
                 }
             } catch (\Throwable $th) {
@@ -32,11 +32,15 @@ class DatabasesController extends Controller {
 
         AuthController::ensureUserIsLogged();
         
-        return new ViewResponse(200, 'visualizeDatabase');
+        return new ViewResponse(200, 'visualizeDatabase', [
+            'viewName' => 'visualizeDatabase'
+        ]);
 
     }
 
     public function getGraph() : JsonResponse {
+
+        AuthController::ensureUserIsLogged();
 
         $networkGraph = [
             'visData' => [
@@ -79,7 +83,7 @@ class DatabasesController extends Controller {
 
                 $database = MongoDBHelper::getClient()->selectDatabase($databaseName);
     
-                foreach ($database->listCollections() as $collectionInfo) {
+                foreach ($database->listCollections(['maxTimeMS' => AppConfig::queryMaxTimeMs()]) as $collectionInfo) {
 
                     $nodeCounter++;
                     
@@ -120,7 +124,7 @@ class DatabasesController extends Controller {
             }
 
         } catch (\Throwable $th) {
-            return new JsonResponse(500, ErrorNormalizer::normalize($th, __METHOD__));
+            return new JsonResponse(self::errorStatus($th), ErrorNormalizer::normalize($th, __METHOD__));
         }
 
         return new JsonResponse(200, $networkGraph);

@@ -9,7 +9,8 @@ class UsersController extends Controller {
         AuthController::ensureUserIsLogged();
         
         return new ViewResponse(200, 'manageUsers', [
-            'databaseNames' => DatabasesController::getDatabaseNames()
+            'databaseNames' => DatabasesController::getDatabaseNames(),
+            'viewName' => 'manageUsers'
         ]);
 
     }
@@ -37,9 +38,11 @@ class UsersController extends Controller {
                 'pwd' => $decodedRequestBody['userPassword'],
                 'roles' => $decodedRequestBody['userRoles']
             ]);
+            Audit::success('user.create', $decodedRequestBody['databaseName']);
 
         } catch (\Throwable $th) {
-            return new JsonResponse(500, ErrorNormalizer::normalize($th, __METHOD__));
+            Audit::error('user.create', $decodedRequestBody['databaseName'] ?? '');
+            return new JsonResponse(self::errorStatus($th), ErrorNormalizer::normalize($th, __METHOD__));
         }
 
         return new JsonResponse(200, true);
@@ -63,11 +66,14 @@ class UsersController extends Controller {
                 $decodedRequestBody['databaseName']
             );
 
-            $usersInfoCommandResult = $database->command(['usersInfo' => 1]);
+            $usersInfoCommandResult = $database->command([
+                'usersInfo' => 1,
+                'maxTimeMS' => AppConfig::queryMaxTimeMs()
+            ]);
             $usersInfo = $usersInfoCommandResult->toArray()[0];
 
         } catch (\Throwable $th) {
-            return new JsonResponse(500, ErrorNormalizer::normalize($th, __METHOD__));
+            return new JsonResponse(self::errorStatus($th), ErrorNormalizer::normalize($th, __METHOD__));
         }
 
         return new JsonResponse(200, $usersInfo);
@@ -93,9 +99,11 @@ class UsersController extends Controller {
 
             // TODO: Check dropUser result?
             $database->command(['dropUser' => $decodedRequestBody['userName']]);
+            Audit::success('user.drop', $decodedRequestBody['databaseName']);
 
         } catch (\Throwable $th) {
-            return new JsonResponse(500, ErrorNormalizer::normalize($th, __METHOD__));
+            Audit::error('user.drop', $decodedRequestBody['databaseName'] ?? '');
+            return new JsonResponse(self::errorStatus($th), ErrorNormalizer::normalize($th, __METHOD__));
         }
 
         return new JsonResponse(200, true);

@@ -7,11 +7,6 @@ services:
           path: ./assets
           target: /app/assets
         - action: sync
-          path: ./extras
-          target: /app/extras
-          ignore:
-            - dataset/
-        - action: sync
           path: ./source
           target: /app/source
         - action: sync
@@ -23,7 +18,32 @@ services:
           path: composer.json
         - action: rebuild
           path: Dockerfile
+        - action: rebuild
+          path: ./config
     ports:
-      - 5000:5000
+      - 8080:8080
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    environment:
+      # MongoURI allowlist: exact hostnames (comma-separated) and/or
+      # suffix domains. Both empty = allow all hosts (with warning).
+      MPG_ALLOWED_MONGODB_HOSTS: ""
+      MPG_ALLOWED_MONGODB_DOMAINS: ""
+      MPG_DEFAULT_DOCUMENTS: "100"
+      # Hard ceiling for find(); production should use 500-1000.
+      MPG_MAX_DOCUMENTS: "1000"
+      MPG_QUERY_MAX_TIME_MS: "60000"
+      MPG_SERVER_SELECTION_TIMEOUT_MS: "5000"
+      MPG_CONNECT_TIMEOUT_MS: "5000"
+      MPG_SOCKET_TIMEOUT_MS: "10000"
+      MPG_MAX_IMPORT_SIZE: "10485760"
+      MPG_MAX_IMPORT_DOCUMENTS: "10000"
+      # "1" only behind TLS (K8s/ingress); dev over http keeps "0".
+      MPG_COOKIE_SECURE: "0"
+      MPG_DEBUG: "0"
     extra_hosts:
       - "localhost:172.17.0.1"

@@ -17,13 +17,34 @@ class ErrorNormalizer {
         $normalizedError = ['error' => null];
 
         $normalizedError['error']['code'] = $error->getCode();
-        $normalizedError['error']['message'] = $error->getMessage();
+
+        // Details reach the client only in debug mode.
+        $normalizedError['error']['message'] = AppConfig::debug()
+            ? self::sanitize($error->getMessage())
+            : 'An internal error has occurred.';
 
         if ( !is_null($function) ) {
             $normalizedError['error']['function'] = $function;
         }
 
+        // Raw messages are never logged: driver exceptions carry topology
+        // and connection details. The server log gets the sanitized form.
+        error_log('MPG error | ' . self::sanitize($error->getMessage())
+            . ( is_null($function) ? '' : ' in ' . $function )
+            . ' | ' . $error->getFile() . ':' . $error->getLine()
+            . ' | ' . $error->getTraceAsString());
+
         return $normalizedError;
+
+    }
+
+    /**
+     * Masks credentials in MongoDB URIs:
+     * mongodb://user:pass@host -> mongodb://***@host
+     */
+    public static function sanitize(string $message) : string {
+
+        return preg_replace('#(mongodb\+?srv?://)[^@/\s]+@#i', '${1}***@', $message);
 
     }
 

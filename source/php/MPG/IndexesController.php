@@ -9,7 +9,8 @@ class IndexesController extends Controller {
         AuthController::ensureUserIsLogged();
 
         return new ViewResponse(200, 'manageIndexes', [
-            'databaseNames' => DatabasesController::getDatabaseNames()
+            'databaseNames' => DatabasesController::getDatabaseNames(),
+            'viewName' => 'manageIndexes'
         ]);
 
     }
@@ -34,9 +35,11 @@ class IndexesController extends Controller {
             $createdIndexName = $collection->createIndex(
                 $decodedRequestBody['key'], $decodedRequestBody['options']
             );
+            Audit::success('index.create', $decodedRequestBody['databaseName'], $decodedRequestBody['collectionName']);
 
         } catch (\Throwable $th) {
-            return new JsonResponse(500, ErrorNormalizer::normalize($th, __METHOD__));
+            Audit::error('index.create', $decodedRequestBody['databaseName'] ?? '', $decodedRequestBody['collectionName'] ?? null);
+            return new JsonResponse(self::errorStatus($th), ErrorNormalizer::normalize($th, __METHOD__));
         }
 
         return new JsonResponse(200, $createdIndexName);
@@ -62,7 +65,7 @@ class IndexesController extends Controller {
                 $decodedRequestBody['databaseName'], $decodedRequestBody['collectionName']
             );
 
-            foreach ($collection->listIndexes() as $indexInfo) {
+            foreach ($collection->listIndexes(['maxTimeMS' => AppConfig::queryMaxTimeMs()]) as $indexInfo) {
                 $indexes[] = [
                     'name' => $indexInfo->getName(),
                     'keys' => $indexInfo->getKey(),
@@ -71,7 +74,7 @@ class IndexesController extends Controller {
             }
 
         } catch (\Throwable $th) {
-            return new JsonResponse(500, ErrorNormalizer::normalize($th, __METHOD__));
+            return new JsonResponse(self::errorStatus($th), ErrorNormalizer::normalize($th, __METHOD__));
         }
 
         return new JsonResponse(200, $indexes);
@@ -97,9 +100,11 @@ class IndexesController extends Controller {
 
             // TODO: Check dropIndex result?
             $collection->dropIndex($decodedRequestBody['indexName']);
+            Audit::success('index.drop', $decodedRequestBody['databaseName'], $decodedRequestBody['collectionName']);
 
         } catch (\Throwable $th) {
-            return new JsonResponse(500, ErrorNormalizer::normalize($th, __METHOD__));
+            Audit::error('index.drop', $decodedRequestBody['databaseName'] ?? '', $decodedRequestBody['collectionName'] ?? null);
+            return new JsonResponse(self::errorStatus($th), ErrorNormalizer::normalize($th, __METHOD__));
         }
 
         return new JsonResponse(200, true);

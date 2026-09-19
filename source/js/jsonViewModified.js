@@ -181,7 +181,7 @@ var JsonView = (function (exports) {
 
     if (node.children.length > 0) {
       el.innerHTML = expandedTemplate({
-        key: node.key,
+        key: MPG.helpers.escapeHTML(node.key),
         size: getSizeString(node)
       });
       var caretEl = el.querySelector('.caret-icon');
@@ -204,14 +204,14 @@ var JsonView = (function (exports) {
       }
 
       el.innerHTML = notExpandedTemplate({
-        key: node.key,
+        key: MPG.helpers.escapeHTML(node.key),
         value: node.value,
         type: _typeof(node.value),
 
         // XXX Modification made for MongoDB PHP GUI.
         documentFieldIsUpdatable: ( documentFieldIsUpdatable ) ? 'true' : 'false',
-        documentId: MPG.documentId,
-        documentFieldName: getDocFieldFromNode(node)
+        documentId: MPG.helpers.escapeHTML(MPG.documentId),
+        documentFieldName: MPG.helpers.escapeHTML(getDocFieldFromNode(node))
 
       });
     }
