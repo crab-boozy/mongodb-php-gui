@@ -98,11 +98,23 @@ The application is hardened:
 
 ## Tests
 
-Security regression suite (CSRF chokepoint on all POST routes, failed-login form, MongoDB URI/allowlist validation):
+Security regression suite (CSRF chokepoint on all POST routes, failed-login form, MongoDB URI/allowlist validation, credential masking in error output, audit log format, open-redirect prefix guard, find-options validation, session/client cleanup):
 
 ```
 docker run --rm --entrypoint php -v "$PWD/tests":/app/tests mongodb-php-gui:latest /app/tests/csrf_routes_test.php
 ```
+
+The suite runs in-process, without a live MongoDB. It is executed on every push/PR by the `Tests` GitHub workflow.
+
+### Manual checks
+
+Before a rollout, walk through these scenarios once against a real deployment:
+
+- [ ] **Login lifecycle** — log in, then run a query in the same (rotated) session; the fresh `<meta name="mpg-csrf-token">` must be accepted by a `POST`.
+- [ ] **Replica-set failover** — log in with a multi-seed URI (`mongodb://rs1:27017,rs2:27017,rs3:27017/?replicaSet=rs0`), stop the PRIMARY, and verify the next query still succeeds.
+- [ ] **Upload limits** — a ~9 MiB JSON import succeeds; a ~10.5 MiB file is rejected with an HTTP 413 JSON body (application guard); a ~13 MiB file is rejected with an HTTP 413 HTML body (nginx).
+- [ ] **Read-only root filesystem** — run with `--read-only` plus tmp volumes for `/var/lib/php`, `/var/lib/nginx` and `/tmp` (or the Kubernetes manifests with their emptyDirs); login and import must work.
+- [ ] **`mongodb+srv`** — connect to a real `mongodb+srv://` cluster (SRV DNS + TLS); the host allowlist must accept or reject it as configured.
 
 ## Credits
 

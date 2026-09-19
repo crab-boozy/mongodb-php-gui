@@ -23,7 +23,13 @@
  *   10. Routes::setPrefix open-redirect guard;
  *   11. normalizeFindOptions/normalizeLimit: the 400-path validation
  *       (php://input is empty in CLI and CSRF blocks the body first, so the
- *       private validator is exercised via reflection).
+ *       private validator is exercised via reflection);
+ *   12. AuthController::resetSessionState regression: the P0 fix that keeps
+ *       the CSRF token alive while wiping auth state;
+ *   13. MongoDBHelper::clearClient: per-session client cache eviction;
+ *   14. /findDocuments with a valid CSRF token and an empty body -> 400
+ *       (php://input is empty in CLI, so this hits the exact decode catch
+ *       the production 400 path uses).
  *
  * The successful-login lifecycle (token rotation -> next request renders a
  * fresh token -> POST with it passes CSRF) exits the PHP process via
@@ -419,6 +425,64 @@ $check('string skip rejected', $optionsRejected(['skip' => '5']));
 $check('negative skip rejected', $optionsRejected(['skip' => -1]));
 $check('non-array sort rejected', $optionsRejected(['sort' => 'name']));
 $check('non-array projection rejected', $optionsRejected(['projection' => 'name']));
+
+// --- AuthController::resetSessionState: P0 regression. ----------------------
+// The wipe must drop auth state but keep the CSRF token; without it a failed
+// login after a success rendered a dead form (empty token).
+echo "== resetSessionState regression checks ==\n";
+
+$authController = ( new \ReflectionClass(AuthController::class) )->newInstanceWithoutConstructor();
+$resetSessionState = ( new \ReflectionClass(AuthController::class) )->getMethod('resetSessionState');
+$resetSessionState->setAccessible(true);
+
+$csrfToken = bin2hex(random_bytes(32));
+$_SESSION['mpg'] = [
+    'csrf_token'     => $csrfToken,
+    'user_is_logged' => true,
+    'mongodb_uri'    => 'mongodb://u:p@mongo1.example.com/test',
+    'mongodb_user'   => 'u',
+    'mongodb_password' => 'p',
+];
+
+$resetSessionState->invoke($authController);
+
+$check('resetSessionState keeps the CSRF token', ($_SESSION['mpg']['csrf_token'] ?? null) === $csrfToken);
+$check('resetSessionState wipes user_is_logged', !isset($_SESSION['mpg']['user_is_logged']));
+$check('resetSessionState wipes mongodb credentials', !isset($_SESSION['mpg']['mongodb_uri'])
+    && !isset($_SESSION['mpg']['mongodb_user']) && !isset($_SESSION['mpg']['mongodb_password']));
+
+$_SESSION['mpg'] = ['user_is_logged' => true];
+$resetSessionState->invoke($authController);
+$check('resetSessionState without a token empties mpg state', $_SESSION['mpg'] === []);
+
+// --- MongoDBHelper::clearClient: session client cache eviction. -------------
+echo "== clearClient checks ==\n";
+
+$clientsProp = ( new \ReflectionClass(MongoDBHelper::class) )->getProperty('clients');
+$clientsProp->setAccessible(true);
+$clientsProp->setValue(null, [session_id() => 'sentinel-client']);
+
+MongoDBHelper::clearClient();
+$check('clearClient drops the session client', !isset($clientsProp->getValue(null)[session_id()]));
+
+$clientsProp->setValue(null, []);
+MongoDBHelper::clearClient();
+$check('clearClient with no client is a no-op', $clientsProp->getValue(null) === []);
+
+// --- /findDocuments: valid CSRF token + empty body -> 400, not 500. ---------
+echo "== findDocuments empty body checks ==\n";
+
+$_SESSION['mpg']['csrf_token'] = bin2hex(random_bytes(32));
+unset($_SERVER['HTTP_X_CSRF_TOKEN']);
+$_POST = [];
+
+$_SERVER['HTTP_X_CSRF_TOKEN'] = $_SESSION['mpg']['csrf_token'];
+$request = $factory->createServerRequest('POST', 'http://localhost/findDocuments');
+$response = $application->dispatch($request);
+unset($_SERVER['HTTP_X_CSRF_TOKEN']);
+$emptyBodyResponse = $bodyOf($response);
+$check('/findDocuments empty body -> ' . $response->getStatusCode() . ' (400 expected)', $response->getStatusCode() === 400);
+$check('/findDocuments empty body -> generic error message', strpos($emptyBodyResponse, 'An internal error has occurred.') !== false);
 
 // ---------------------------------------------------------------------------
 if ( $failures > 0 ) {
