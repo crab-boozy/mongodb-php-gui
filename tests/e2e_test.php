@@ -26,8 +26,12 @@
 $mongoUri = getenv('MPG_TEST_MONGO_URI');
 $baseUrl = rtrim((string) (getenv('MPG_E2E_BASE_URL') ?: 'http://127.0.0.1'), '/');
 
+require __DIR__ . '/junit_report.php';
+
 if ( $mongoUri === false || $mongoUri === '' ) {
     echo "  SKIP  E2E live MongoDB test (MPG_TEST_MONGO_URI not set)\n";
+    mpg_junit_skip('E2E suite skipped (MPG_TEST_MONGO_URI not set)');
+    mpg_junit_write('e2e');
     exit(0);
 }
 
@@ -40,6 +44,8 @@ $check = function(string $label, bool $ok) use (&$failures) : void {
         echo "  FAIL  $label\n";
         $failures++;
     }
+
+    mpg_junit_record($label, $ok);
 };
 
 /**
@@ -293,6 +299,8 @@ list($status, , $body) = jsonPost($baseUrl, '/countDocuments', ['databaseName' =
 $check('count after drop -> ' . trim($body) . ' (0 expected)', $status === 200 && trim($body) === '0');
 
 // ---------------------------------------------------------------------------
+mpg_junit_write('e2e');
+
 if ( $failures > 0 ) {
     fwrite(STDERR, "\n$failures E2E check(s) FAILED.\n");
     exit(1);

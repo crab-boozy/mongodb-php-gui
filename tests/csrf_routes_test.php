@@ -93,6 +93,8 @@ $postRoutes = [
     '/dropUser',
 ];
 
+require __DIR__ . '/junit_report.php';
+
 $failures = 0;
 
 $check = function(string $label, bool $ok) use (&$failures) : void {
@@ -102,6 +104,8 @@ $check = function(string $label, bool $ok) use (&$failures) : void {
         echo "  FAIL  $label\n";
         $failures++;
     }
+
+    mpg_junit_record($label, $ok);
 };
 
 $factory = new ServerRequestFactory();
@@ -485,6 +489,8 @@ $check('/findDocuments empty body -> ' . $response->getStatusCode() . ' (400 exp
 $check('/findDocuments empty body -> generic error message', strpos($emptyBodyResponse, 'An internal error has occurred.') !== false);
 
 // ---------------------------------------------------------------------------
+mpg_junit_write('csrf_routes');
+
 if ( $failures > 0 ) {
     fwrite(STDERR, "\n$failures check(s) FAILED.\n");
     exit(1);

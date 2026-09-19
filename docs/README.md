@@ -118,6 +118,8 @@ docker run --rm --network host --entrypoint php \
 
 Without `MPG_TEST_MONGO_URI` the E2E suite prints `SKIP` and exits 0.
 
+Both suites report in JUnit XML, so every run shows a **Test results** tab on the GitHub Actions page (pass/fail/skip per check).
+
 ### Manual checks
 
 The login lifecycle is covered automatically by the E2E suite. Before a rollout, walk through these scenarios once against a real deployment:
