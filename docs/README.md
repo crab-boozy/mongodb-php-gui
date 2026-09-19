@@ -14,6 +14,43 @@ Runs as **nginx + PHP-FPM** (non-root) in Docker or Kubernetes.
 
 ![MongoDB PHP GUI - Query Documents](screenshots/query-documents.png)
 
+## Usage
+
+### Query Syntax
+
+#### Relaxed JSON
+
+MongoDB PHP GUI supports a relaxed JSON syntax. In practice, this query:
+
+```js
+city: New York
+```
+
+Will produce same result that:
+
+```js
+{ "city": "New York" }
+```
+
+#### Regular Expressions
+
+Imagine you want to find all the US cities starting with "San An". This query:
+
+```js
+city: /^San An/
+```
+
+Will output:
+- San Antonio (FL)
+- San Angelo (TX)
+- ...
+
+### Key Shortcuts
+
+<kbd>Ctrl + Space</kbd> Autocomplete the query<br>
+<kbd>Ctrl + *</kbd> Count doc(s) matching the query<br>
+<kbd>Ctrl + Enter</kbd> Find doc(s) matching the query
+
 ## Building from source
 
 ```
@@ -58,43 +95,6 @@ The application is hardened:
 * Set `MPG_ALLOWED_MONGODB_HOSTS` / `MPG_ALLOWED_MONGODB_DOMAINS` — without them any MongoDB host is allowed (a warning is logged).
 * Lower `MPG_MAX_DOCUMENTS` to `500`–`1000` (the code default is 1 000 000).
 * Set `MPG_COOKIE_SECURE=1` when TLS terminates at the ingress.
-
-## Usage
-
-### Query Syntax
-
-#### Relaxed JSON
-
-MongoDB PHP GUI supports a relaxed JSON syntax. In practice, this query:
-
-```js
-city: New York
-```
-
-Will produce same result that:
-
-```js
-{ "city": "New York" }
-```
-
-#### Regular Expressions
-
-Imagine you want to find all the US cities starting with "San An". This query:
-
-```js
-city: /^San An/
-```
-
-Will output:
-- San Antonio (FL)
-- San Angelo (TX)
-- ...
-
-### Key Shortcuts
-
-<kbd>Ctrl + Space</kbd> Autocomplete the query<br>
-<kbd>Ctrl + *</kbd> Count doc(s) matching the query<br>
-<kbd>Ctrl + Enter</kbd> Find doc(s) matching the query
 
 ## Tests
 
