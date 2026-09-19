@@ -44,7 +44,7 @@ class ErrorNormalizer {
      */
     public static function sanitize(string $message) : string {
 
-        return preg_replace('#(mongodb\+?srv?://)[^@/\s]+@#i', '${1}***@', $message);
+        return preg_replace('#(mongodb(?:\+srv)?://)[^@/\s]+@#i', '${1}***@', $message);
 
     }
 

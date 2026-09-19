@@ -16,7 +16,14 @@
  * Additionally:
  *   6. failed login re-renders the form with a non-empty token;
  *   7. MongoURI/host parser: seed lists, allowlist boundaries, port range,
- *      SRV strictness.
+ *      SRV strictness;
+ *   8. ErrorNormalizer: credential masking, generic client message,
+ *      sanitized server log, debug-on detail via subprocess;
+ *   9. Audit: line format, allowlist, CR/LF log-injection guard;
+ *   10. Routes::setPrefix open-redirect guard;
+ *   11. normalizeFindOptions/normalizeLimit: the 400-path validation
+ *       (php://input is empty in CLI and CSRF blocks the body first, so the
+ *       private validator is exercised via reflection).
  *
  * The successful-login lifecycle (token rotation -> next request renders a
  * fresh token -> POST with it passes CSRF) exits the PHP process via
@@ -261,10 +268,162 @@ $check('srv with port rejected', $srvRejected('foo.example.com:27017'));
 $check('srv with comma rejected', $srvRejected('foo.example.com,evil.com'));
 $check('plain srv accepted', AppConfig::extractHost('foo.example.com', true) === 'foo.example.com');
 
+// --- ErrorNormalizer: masking, generic client message, sanitized log. -------
+echo "== ErrorNormalizer checks ==\n";
+
+$check('sanitize masks mongodb credentials', ErrorNormalizer::sanitize('connect mongodb://secuser:secret@mongo1.example.com/db') === 'connect mongodb://***@mongo1.example.com/db');
+$check('sanitize masks mongodb+srv credentials', ErrorNormalizer::sanitize('mongodb+srv://user:p%40ss@cluster0.example.com/?tls=true') === 'mongodb+srv://***@cluster0.example.com/?tls=true');
+$check('sanitize masks every URI in a message', ErrorNormalizer::sanitize('mongodb://a:b@h1:27017 then mongodb://c:d@h2:27017') === 'mongodb://***@h1:27017 then mongodb://***@h2:27017');
+$check('sanitize leaves a URI without credentials alone', ErrorNormalizer::sanitize('connected to mongodb://mongo1:27017') === 'connected to mongodb://mongo1:27017');
+$check('sanitize is case-insensitive', ErrorNormalizer::sanitize('MONGODB://u:p@h') === 'MONGODB://***@h');
+
+$errLogFile = tempnam(sys_get_temp_dir(), 'mpg-test-errlog-');
+$originalErrLog = ini_get('error_log');
+ini_set('error_log', $errLogFile);
+
+$normalized = ErrorNormalizer::normalize(
+    new \Exception('connection failed: mongodb://secuser:secret@mongo1.example.com/db', 42),
+    'MPG\DocumentsController::find'
+);
+ErrorNormalizer::normalize(new \Exception('plain message'), null);
+
+$check('debug off: client gets a generic message', $normalized['error']['message'] === 'An internal error has occurred.');
+$check('debug off: exception code preserved', $normalized['error']['code'] === 42);
+$check('debug off: function preserved', $normalized['error']['function'] === 'MPG\DocumentsController::find');
+$check('no function passed: key omitted', !isset(ErrorNormalizer::normalize(new \Exception('x'), null)['error']['function']));
+
+$logContent = (string) @file_get_contents($errLogFile);
+$check('server log has the MPG error line', strpos($logContent, 'MPG error | connection failed: ') !== false);
+$check('server log URI is sanitized', strpos($logContent, 'mongodb://***@mongo1.example.com/db') !== false);
+$check('server log keeps the function', strpos($logContent, ' in MPG\DocumentsController::find') !== false);
+$check('server log has no raw credentials', strpos($logContent, 'secuser:secret@') === false);
+
+// Debug mode is cached in AppConfig on first access, so the debug-on path is
+// asserted in a subprocess where MPG_DEBUG=1 is the only difference.
+$debugOnSnippet = '$l = require "/app/vendor/autoload.php";'
+    . ' $l->add("MPG", "/app/source/php");'
+    . ' try { throw new Exception("conn mongodb://secuser:secret@mongo1.example.com"); }'
+    . ' catch (Throwable $e) { echo MPG\ErrorNormalizer::normalize($e, "fnX")["error"]["message"]; }';
+$debugOnOut = [];
+exec('MPG_DEBUG=1 php -r ' . escapeshellarg($debugOnSnippet), $debugOnOut, $debugOnRc);
+$debugOnMsg = implode("\n", $debugOnOut);
+$check('debug on: sanitized detail reaches the client', $debugOnMsg === 'conn mongodb://***@mongo1.example.com');
+$check('debug on: raw credentials never reach the client', $debugOnRc === 0 && strpos($debugOnMsg, 'secuser:secret@') === false);
+
+ini_set('error_log', $originalErrLog);
+@unlink($errLogFile);
+
+// --- Audit: line format, allowlist, log-injection guard. ---------------------
+echo "== Audit checks ==\n";
+
+$auditFile = tempnam(sys_get_temp_dir(), 'mpg-test-audit-');
+ini_set('error_log', $auditFile);
+
+$truncate = static function() use ($auditFile) : void {
+    file_put_contents($auditFile, '');
+};
+
+$auditLines = static function() use ($auditFile) : array {
+    $content = (string) file_get_contents($auditFile);
+    $content = rtrim($content, "\n");
+    return $content === '' ? [] : explode("\n", $content);
+};
+
+$expectedSession = substr(hash('sha256', session_id()), 0, 8);
+
+// error_log() prepends a [timestamp] prefix; strip it before asserting.
+$stripTimestamp = static function(string $line) : string {
+    return (string) preg_replace('/^\[[^\]]*\] /', '', $line);
+};
+
+$truncate();
+Audit::success('document.insert_one', 'testdb', 'coll1');
+$lines = $auditLines();
+$check('audit success line format', count($lines) === 1
+    && $stripTimestamp($lines[0]) === 'MPG audit | op=document.insert_one db=testdb coll=coll1 result=success session=' . $expectedSession);
+
+$truncate();
+Audit::error('document.import', 'testdb', null);
+$lines = $auditLines();
+$check('audit error with null collection -> coll=-', count($lines) === 1
+    && strpos($lines[0], 'op=document.import db=testdb coll=- result=error session=' . $expectedSession) !== false);
+
+$truncate();
+Audit::success('document.evil', 'testdb', 'x');
+$check('unknown operation is not audited', $auditLines() === []);
+
+$truncate();
+Audit::success('document.import', "te\nst", "c\r1");
+$lines = $auditLines();
+$check('CR/LF in names stay on one line', count($lines) === 1
+    && strpos($lines[0], 'db=te' . '\\' . 'nst coll=c' . '\\' . 'r1') !== false);
+
+$truncate();
+Audit::success('document.import', '  spaced  ', 'c');
+$lines = $auditLines();
+$check('audit values are trimmed', count($lines) === 1 && strpos($lines[0], 'db=spaced coll=c') !== false);
+
+ini_set('error_log', $originalErrLog);
+@unlink($auditFile);
+
+// --- Routes::setPrefix: open-redirect guard. ---------------------------------
+echo "== Routes::setPrefix guard checks ==\n";
+
+$prefixCheck = static function(string $uri, string $expected) use ($check) : void {
+    $_SERVER['REQUEST_URI'] = $uri;
+    Routes::setPrefix();
+    $shown = str_replace(["\x00", "\n", "\r"], ['\\0', '\\n', '\\r'], $uri);
+    $check("setPrefix('" . $shown . "') -> '" . Routes::getPrefix() . "'", Routes::getPrefix() === $expected);
+};
+
+$prefixCheck('/mongo/', '/mongo');
+$prefixCheck('/mongo/login', '/mongo');
+$prefixCheck('/', '');
+$prefixCheck('//evil.com/', '');
+$prefixCheck('/a//b/', '');
+$prefixCheck("/a\x00b/", '');
+
+$_SERVER['REQUEST_URI'] = '/';
+Routes::setPrefix();
+$check('prefix restored to empty after tests', Routes::getPrefix() === '');
+
+// --- normalizeFindOptions/normalizeLimit: 400-path validation. ---------------
+echo "== find options validation checks ==\n";
+
+$normalizeOptions = static function($userOptions) {
+    $method = new \ReflectionMethod(DocumentsController::class, 'normalizeFindOptions');
+    return $method->invoke(null, $userOptions);
+};
+
+$optionsRejected = static function($userOptions) use ($normalizeOptions) : bool {
+    try {
+        $normalizeOptions($userOptions);
+        return false;
+    } catch (\InvalidArgumentException $e) {
+        return true;
+    }
+};
+
+$check('no options -> default page size', $normalizeOptions([]) === ['limit' => AppConfig::defaultDocuments()]);
+$check('int limit passes through', $normalizeOptions(['limit' => 500]) === ['limit' => 500]);
+$check('numeric string limit accepted', $normalizeOptions(['limit' => '500']) === ['limit' => 500]);
+$check('limit 0 -> default page size', $normalizeOptions(['limit' => 0]) === ['limit' => AppConfig::defaultDocuments()]);
+$check('explicit null limit -> default page size', $normalizeOptions(['limit' => null]) === ['limit' => AppConfig::defaultDocuments()]);
+$check('limit above max is clamped', $normalizeOptions(['limit' => 5000000]) === ['limit' => AppConfig::maxDocuments()]);
+$check('non-numeric string limit rejected', $optionsRejected(['limit' => 'abc']));
+$check('negative limit rejected', $optionsRejected(['limit' => -5]));
+$check('float limit rejected', $optionsRejected(['limit' => 1.5]));
+$check('non-array options rejected', $optionsRejected('nope'));
+$check('valid skip passes through', $normalizeOptions(['skip' => 5]) === ['limit' => AppConfig::defaultDocuments(), 'skip' => 5]);
+$check('string skip rejected', $optionsRejected(['skip' => '5']));
+$check('negative skip rejected', $optionsRejected(['skip' => -1]));
+$check('non-array sort rejected', $optionsRejected(['sort' => 'name']));
+$check('non-array projection rejected', $optionsRejected(['projection' => 'name']));
+
 // ---------------------------------------------------------------------------
 if ( $failures > 0 ) {
     fwrite(STDERR, "\n$failures check(s) FAILED.\n");
     exit(1);
 }
 
-echo "\nAll CSRF checks passed.\n";
+echo "\nAll checks passed.\n";
