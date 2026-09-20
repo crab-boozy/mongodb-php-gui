@@ -488,6 +488,11 @@ $emptyBodyResponse = $bodyOf($response);
 $check('/findDocuments empty body -> ' . $response->getStatusCode() . ' (400 expected)', $response->getStatusCode() === 400);
 $check('/findDocuments empty body -> generic error message', strpos($emptyBodyResponse, 'An internal error has occurred.') !== false);
 
+echo "== import limit constant checks ==\n";
+
+$check('import size limit fixed at 50MB', AppConfig::maxImportSize() === 52428800);
+$check('import document limit fixed at 100000', AppConfig::maxImportDocuments() === 100000);
+
 // ---------------------------------------------------------------------------
 mpg_junit_write('csrf_routes');
 

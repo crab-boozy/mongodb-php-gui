@@ -54,10 +54,7 @@ spec:
               value: "5000"
             - name: MPG_SOCKET_TIMEOUT_MS
               value: "10000"
-            - name: MPG_MAX_IMPORT_SIZE
-              value: "10485760"
-            - name: MPG_MAX_IMPORT_DOCUMENTS
-              value: "10000"
+            # Import limits are fixed in the image (50MB / 100k documents).
             # TLS terminates at the ingress.
             - name: MPG_COOKIE_SECURE
               value: "1"

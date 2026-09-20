@@ -77,11 +77,11 @@ jobs:
             echo "missing audit line for $op"
           fi
         done
-        # Minimal logging default: nginx access-log lines must be absent
-        # (combined format: "<ip> - - [date] ...").
+        # Access logging is disabled by design (static nginx.conf):
+        # combined-format lines "<ip> - - [date] ..." must be absent.
         if grep -q '^127\.0\.0\.1 - - \[' /tmp/mpg-audit.log; then
           failures=$((failures + 1))
-          cases="$cases  <testcase name=\"audit: no access log lines\" time=\"0\"><failure message=\"nginx access log lines found (MPG_ACCESS_LOG default off)\"/></testcase>"$'\n'
+          cases="$cases  <testcase name=\"audit: no access log lines\" time=\"0\"><failure message=\"nginx access log lines found (access log must stay off)\"/></testcase>"$'\n'
           echo "nginx access log lines found in container output"
         else
           cases="$cases  <testcase name=\"audit: no access log lines\" time=\"0\"/>"$'\n'

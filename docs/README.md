@@ -73,13 +73,8 @@ The multi-stage build compiles the `mongodb` PHP extension (version pinned in th
 | `MPG_SERVER_SELECTION_TIMEOUT_MS` | `5000`     | Driver server selection timeout.                                                                                    |
 | `MPG_CONNECT_TIMEOUT_MS`          | `5000`     | Driver connection timeout.                                                                                          |
 | `MPG_SOCKET_TIMEOUT_MS`           | `10000`    | Driver socket timeout.                                                                                              |
-| `MPG_MAX_IMPORT_SIZE`             | `10485760` | Maximum import file size in bytes (drives `upload_max_filesize` and nginx `client_max_body_size`).                  |
-| `MPG_MAX_IMPORT_DOCUMENTS`        | `10000`    | Maximum number of documents in an import file.                                                                      |
 | `MPG_COOKIE_SECURE`               | `0`        | Set `1` when TLS terminates at the ingress.                                                                         |
 | `MPG_DEBUG`                       | `0`        | Set `1` to include error details in responses (development only).                                                   |
-| `MPG_ACCESS_LOG`                  | `off`      | Set `on` to write an access log (combined format) to stdout. Minimal-logging default.                               |
-| `MPG_NGINX_LOG_LEVEL`             | `crit`     | Nginx `error_log` level (`debug`, `info`, `notice`, `warn`, `err`, `crit`, `alert`, `emerg`).                       |
-| `MPG_PHP_LOG_LEVEL`               | `production` | PHP `error_reporting`: `production` = errors and warnings only (no notices/deprecations); `all` = `E_ALL`.        |
 
 ## Security
 
@@ -88,7 +83,7 @@ The application is hardened:
 * **MongoDB URI allowlist** — `MPG_ALLOWED_MONGODB_HOSTS` / `MPG_ALLOWED_MONGODB_DOMAINS` restrict which servers can be connected to (exact hosts and boundary-aware domain suffixes, port validated to 1–65535, strict `mongodb+srv` handling, every host of a replica-set seed list is checked).
 * **CSRF protection** on every mutating (POST) route; the token is per-session and rotated on login.
 * **Per-session MongoDB clients** — one user cannot see another user's connection or credentials; the client is dropped on logout.
-* **Query and import limits** — `MPG_MAX_DOCUMENTS` document cap, `maxTimeMS` on reads, bounded import size and document count (over-size uploads are rejected with HTTP 413).
+* **Query and import limits** — `MPG_MAX_DOCUMENTS` document cap, `maxTimeMS` on reads, fixed import limits: 50MB file and 100 000 documents (over-size uploads are rejected with HTTP 413).
 * **Safe errors** — error responses never leak credentials or connection details (set `MPG_DEBUG=1` in development only).
 * **Audit log** — every mutating operation (insert/update/delete/import, collection, index and user changes) is written to `stderr`.
 * **Container hardening** — non-root (UID 808), works with a read-only root filesystem (Kubernetes), all logs go to stdout/stderr only.
@@ -98,7 +93,8 @@ The application is hardened:
 * Set `MPG_ALLOWED_MONGODB_HOSTS` / `MPG_ALLOWED_MONGODB_DOMAINS` — without them any MongoDB host is allowed (a warning is logged).
 * Lower `MPG_MAX_DOCUMENTS` to `500`–`1000` (the code default is 1 000 000).
 * Set `MPG_COOKIE_SECURE=1` when TLS terminates at the ingress.
-* Logging is minimal by default (no access log, nginx errors at `crit`, PHP notices/deprecations suppressed). The application's own `MPG audit |` / `MPG error |` / `MPG config |` lines are always written to stderr; raise `MPG_ACCESS_LOG`, `MPG_NGINX_LOG_LEVEL` and/or `MPG_PHP_LOG_LEVEL` for debugging.
+* Logging is fixed and minimal: no access log, nginx errors at `crit`, PHP errors/warnings only (no notices/deprecations). The application's own `MPG audit |` / `MPG error |` / `MPG config |` lines are always written to stderr.
+* Import is capped at 50MB per file and 100 000 documents (fixed in the image). A 50MB import is decoded fully in memory, so plan for up to ~512MB of RAM per concurrent import (`pm.max_children = 5`).
 
 ## Tests
 

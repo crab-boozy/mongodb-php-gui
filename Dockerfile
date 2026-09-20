@@ -56,9 +56,9 @@ RUN chown -R mpg:mpg /app /var/lib/php /var/lib/nginx /var/lib/supervisor \
   && chown -R mpg:mpg /var/lib/nginx/logs \
   && rm -f /var/log/*.log
 
-# PHP scans the runtime ini directory (populated by the entrypoint) in
-# addition to the system configuration.
-ENV PHP_INI_SCAN_DIR=/app/config/runtime/php:/usr/local/etc/php/conf.d
+# PHP scans the static runtime ini directory (mpg.ini) in addition to the
+# system configuration.
+ENV PHP_INI_SCAN_DIR=/app/config/php:/usr/local/etc/php/conf.d
 
 EXPOSE 8080
 

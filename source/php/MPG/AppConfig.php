@@ -10,6 +10,14 @@ namespace MPG;
  */
 class AppConfig {
 
+    /**
+     * Import limits are fixed by design (see docs/README.md, "Production
+     * notes"): 50MB file (nginx client_max_body_size is 52M = file +
+     * multipart overhead) and 100 000 documents per import file.
+     */
+    public const IMPORT_SIZE_LIMIT = 52428800;
+    public const IMPORT_DOCUMENTS_LIMIT = 100000;
+
     private static ?array $config = null;
 
     private function __construct() {
@@ -36,8 +44,8 @@ class AppConfig {
                 'serverSelectionTimeout' => self::envInt('MPG_SERVER_SELECTION_TIMEOUT_MS', 5000, 100, 60000),
                 'connectTimeout'         => self::envInt('MPG_CONNECT_TIMEOUT_MS', 5000, 100, 60000),
                 'socketTimeout'          => self::envInt('MPG_SOCKET_TIMEOUT_MS', 10000, 100, 60000),
-                'maxImportSize'          => self::envInt('MPG_MAX_IMPORT_SIZE', 10485760, 1, null),
-                'maxImportDocuments'     => self::envInt('MPG_MAX_IMPORT_DOCUMENTS', 10000, 1, null),
+                'maxImportSize'          => self::IMPORT_SIZE_LIMIT,
+                'maxImportDocuments'     => self::IMPORT_DOCUMENTS_LIMIT,
                 'cookieSecure'           => self::envBool('MPG_COOKIE_SECURE', false),
                 'debug'                  => self::envBool('MPG_DEBUG', false),
             ];
