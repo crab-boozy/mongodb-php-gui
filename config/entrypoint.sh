@@ -7,6 +7,26 @@ case "$MAX_IMPORT_SIZE" in
 esac
 POST_MAX_SIZE=$((MAX_IMPORT_SIZE + 2097152))
 
+# Access log: minimal by default, opt-in with MPG_ACCESS_LOG=on.
+case "${MPG_ACCESS_LOG:-off}" in
+    on|1|true|yes) ACCESS_LOG_DIRECTIVE='access_log /dev/stdout combined;' ;;
+    off|0|false|no|'') ACCESS_LOG_DIRECTIVE='access_log off;' ;;
+    *) ACCESS_LOG_DIRECTIVE='access_log off;'; echo "MPG config | MPG_ACCESS_LOG='${MPG_ACCESS_LOG}' is invalid; using off." >&2 ;;
+esac
+
+# Nginx error log level: critical-only by default.
+case "${MPG_NGINX_LOG_LEVEL:-crit}" in
+    debug|info|notice|warn|err|crit|alert|emerg) NGINX_LOG_LEVEL="${MPG_NGINX_LOG_LEVEL:-crit}" ;;
+    *) NGINX_LOG_LEVEL='crit'; echo "MPG config | MPG_NGINX_LOG_LEVEL='${MPG_NGINX_LOG_LEVEL}' is invalid; using crit." >&2 ;;
+esac
+
+# PHP error_reporting: production-minimal by default (no notices/deprecations).
+case "${MPG_PHP_LOG_LEVEL:-production}" in
+    all|max) PHP_ERROR_REPORTING='E_ALL' ;;
+    production|'') PHP_ERROR_REPORTING='E_ERROR | E_WARNING | E_PARSE | E_RECOVERABLE_ERROR' ;;
+    *) PHP_ERROR_REPORTING='E_ERROR | E_WARNING | E_PARSE | E_RECOVERABLE_ERROR'; echo "MPG config | MPG_PHP_LOG_LEVEL='${MPG_PHP_LOG_LEVEL}' is invalid; using production." >&2 ;;
+esac
+
 RUNTIME_DIR="/app/config/runtime"
 mkdir -p "$RUNTIME_DIR/php" "$RUNTIME_DIR/nginx"
 
@@ -18,6 +38,7 @@ upload_tmp_dir = /tmp
 session.save_path = /var/lib/php/sessions
 session.use_strict_mode = 1
 expose_php = Off
+error_reporting = ${PHP_ERROR_REPORTING}
 display_errors = 0
 log_errors = On
 error_log = /dev/stderr
@@ -71,7 +92,7 @@ EOF
 cat > "$RUNTIME_DIR/nginx/nginx.conf" <<EOF
 worker_processes 1;
 pid /var/lib/nginx/nginx.pid;
-error_log /dev/stderr warn;
+    error_log /dev/stderr ${NGINX_LOG_LEVEL};
 
 events {
     worker_connections 1024;
@@ -81,7 +102,7 @@ http {
     include /etc/nginx/mime.types;
     default_type application/octet-stream;
 
-    access_log /dev/stdout combined;
+    ${ACCESS_LOG_DIRECTIVE}
 
     sendfile on;
     server_tokens off;

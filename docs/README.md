@@ -77,6 +77,9 @@ The multi-stage build compiles the `mongodb` PHP extension (version pinned in th
 | `MPG_MAX_IMPORT_DOCUMENTS`        | `10000`    | Maximum number of documents in an import file.                                                                      |
 | `MPG_COOKIE_SECURE`               | `0`        | Set `1` when TLS terminates at the ingress.                                                                         |
 | `MPG_DEBUG`                       | `0`        | Set `1` to include error details in responses (development only).                                                   |
+| `MPG_ACCESS_LOG`                  | `off`      | Set `on` to write an access log (combined format) to stdout. Minimal-logging default.                               |
+| `MPG_NGINX_LOG_LEVEL`             | `crit`     | Nginx `error_log` level (`debug`, `info`, `notice`, `warn`, `err`, `crit`, `alert`, `emerg`).                       |
+| `MPG_PHP_LOG_LEVEL`               | `production` | PHP `error_reporting`: `production` = errors and warnings only (no notices/deprecations); `all` = `E_ALL`.        |
 
 ## Security
 
@@ -95,6 +98,7 @@ The application is hardened:
 * Set `MPG_ALLOWED_MONGODB_HOSTS` / `MPG_ALLOWED_MONGODB_DOMAINS` — without them any MongoDB host is allowed (a warning is logged).
 * Lower `MPG_MAX_DOCUMENTS` to `500`–`1000` (the code default is 1 000 000).
 * Set `MPG_COOKIE_SECURE=1` when TLS terminates at the ingress.
+* Logging is minimal by default (no access log, nginx errors at `crit`, PHP notices/deprecations suppressed). The application's own `MPG audit |` / `MPG error |` / `MPG config |` lines are always written to stderr; raise `MPG_ACCESS_LOG`, `MPG_NGINX_LOG_LEVEL` and/or `MPG_PHP_LOG_LEVEL` for debugging.
 
 ## Tests
 
