@@ -51,8 +51,8 @@ $check = function(string $label, bool $ok) use (&$failures) : void {
 /**
  * Minimal HTTP client on top of stream contexts (no curl dependency).
  *
- * @return array{0:int, 1:string, 2:string, 3:array<string,string>}
- *               [status, location, body, set-cookies]
+ * @return array{0:int, 1:string, 2:string, 3:array<string,string>, 4:array<string,string>}
+ *               [status, location, body, set-cookies, response-headers (lowercase keys)]
  */
 function httpRequest(string $method, string $url, array $headers = [], ?string $body = null, array $cookies = []) : array {
 
@@ -84,6 +84,7 @@ function httpRequest(string $method, string $url, array $headers = [], ?string $
     $status = 0;
     $location = '';
     $setCookies = [];
+    $headers = [];
 
     foreach ( $http_response_header as $line ) {
         if ( preg_match('#^HTTP/\S+\s+(\d+)#', $line, $m) ) {
@@ -97,10 +98,13 @@ function httpRequest(string $method, string $url, array $headers = [], ?string $
             if ( count($parts) === 2 ) {
                 $setCookies[trim($parts[0])] = trim($parts[1]);
             }
+        } elseif ( strpos($line, ':') !== false && stripos($line, 'HTTP/') !== 0 ) {
+            $pos = strpos($line, ':');
+            $headers[strtolower(trim(substr($line, 0, $pos)))] = trim(substr($line, $pos + 1));
         }
     }
 
-    return [$status, $location, (string) $responseBody, $setCookies];
+    return [$status, $location, (string) $responseBody, $setCookies, $headers];
 
 }
 
@@ -155,11 +159,19 @@ list($status, , $healthBody) = httpRequest('GET', $baseUrl . '/health');
 $check('/health -> ' . $status . ' (200 expected)', $status === 200);
 
 // --- Login lifecycle: form -> 302 -> rotated session -> fresh token. ----------
-list($status, , $loginPage, $setCookies) = httpRequest('GET', $baseUrl . '/login');
+list($status, , $loginPage, $setCookies, $headers) = httpRequest('GET', $baseUrl . '/login');
 $cookies = $setCookies;
 
 $tokenBefore = metaToken($loginPage);
 $check('login page -> ' . $status . ' with non-empty CSRF token', $status === 200 && $tokenBefore !== '');
+
+// --- Security response headers on the public (unauthenticated) page. -----------
+$check('X-Frame-Options: DENY', ($headers['x-frame-options'] ?? '') === 'DENY');
+$check('X-Content-Type-Options: nosniff', ($headers['x-content-type-options'] ?? '') === 'nosniff');
+$check('Content-Security-Policy locked down', strpos($headers['content-security-policy'] ?? '', "default-src 'self'; script-src 'self'") !== false);
+$check('Permissions-Policy set', ($headers['permissions-policy'] ?? '') !== '');
+$check('Cross-Origin-Resource-Policy: same-origin', ($headers['cross-origin-resource-policy'] ?? '') === 'same-origin');
+$check('no X-Powered-By header', !isset($headers['x-powered-by']));
 
 list($status, $location, , $setCookies) = httpRequest(
     'POST',

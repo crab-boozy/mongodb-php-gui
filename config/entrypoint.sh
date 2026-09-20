@@ -17,6 +17,7 @@ post_max_size = ${POST_MAX_SIZE}
 upload_tmp_dir = /tmp
 session.save_path = /var/lib/php/sessions
 session.use_strict_mode = 1
+expose_php = Off
 display_errors = 0
 log_errors = On
 error_log = /dev/stderr
@@ -90,6 +91,12 @@ http {
         listen 0.0.0.0:8080;
 
         root /app;
+
+        add_header X-Frame-Options "DENY" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; blob-src 'self'" always;
+        add_header Permissions-Policy "camera=(), geolocation=(), microphone=()" always;
+        add_header Cross-Origin-Resource-Policy "same-origin" always;
 
         location ~ /\. {
             deny all;
