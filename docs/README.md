@@ -105,12 +105,16 @@ The image is published to Docker Hub as `boozy1981/mongodb-php-gui`:
 | `boozy1981/mongodb-php-gui:<version>` | Versioned build, e.g. `1.0.0`. |
 | `boozy1981/mongodb-php-gui:latest` | The most recently published build. |
 
-Publishing is gated by the full test suite (in-process + E2E against a live MongoDB + audit checks — the publish job only runs when they all pass). It triggers on **release creation** (GitHub creates the tag automatically from the tag name you enter):
+Publishing is **manual only** and gated by the full test suite (in-process + E2E against a live MongoDB + audit checks — the publish job only runs when they all pass). Actions → `CI` → Run workflow: pick a ref and, optionally, a version tag:
 
-* GitHub UI: `Releases` → `Create a new release` → tag `v1.0.0` → publish.
-* CLI: `gh release create v1.0.0`.
+| Ref picked in the dialog | `tag` field | Docker Hub tags |
+| --- | --- | --- |
+| `master` | `1.0.0` | `1.0.0` + `latest` |
+| `master` | *(empty)* | `master-<short-sha>` |
+| any other branch | *(ignored)* | `dev-<short-sha>` |
+| a tag, e.g. `v1.0.0` | *(ignored)* | `1.0.0` (the version without `v`; `latest` is not touched) |
 
-An ad-hoc build of the current master (no release): Actions → `Publish image` → Run workflow (optional tag input; empty = `dev-<short-sha>`). The workflow needs the repository secrets `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN`.
+Only an explicit version tag from `master` updates `latest`. Creating a GitHub release (UI or `gh release create v1.0.0`) runs the test suite on the release commit only — it never publishes an image. The publish job needs the repository secrets `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN`.
 
 ## Deployment: OIDC (ADFS)
 
@@ -178,7 +182,7 @@ Start with Option A (zero code change); move to Option B if the team or uptime r
 
 ## Tests
 
-Two suites, both executed on every push/PR by the `Tests` GitHub workflow:
+Two suites, both executed on every push/PR by the `CI` GitHub workflow:
 
 **In-process regression suite** — runs without a live MongoDB (CSRF chokepoint on all POST routes, failed-login form, MongoDB URI/allowlist validation, credential masking in error output, audit log format, open-redirect prefix guard, find-options validation, session/client cleanup):
 
