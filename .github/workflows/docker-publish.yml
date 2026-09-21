@@ -154,10 +154,10 @@ jobs:
         password: ${{ secrets.DOCKERHUB_TOKEN }}
 
     - name: Build and push
+      # No type=gha cache: the default buildx driver on the runners is
+      # "docker", which cannot export to the GHA cache backend.
       uses: docker/build-push-action@v6
       with:
         context: .
         push: true
         tags: ${{ steps.tags.outputs.tags }}
-        cache-from: type=gha
-        cache-to: type=gha,mode=max
