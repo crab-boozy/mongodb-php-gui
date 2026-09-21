@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="mpg-csrf-token" content="<?= \MPG\Csrf::token() ?>">
 
-    <title>MongoDB PHP GUI v<?php echo MPG\VERSION; ?></title>
+    <title>MongoDB PHP GUI</title>
 
     <link rel="icon" href="./assets/images/mpg-icon.svg">
     <link rel="mask-icon" href="./assets/images/mpg-safari-icon.svg" color="#6eb825">

@@ -55,8 +55,7 @@ $loader->add('MPG', __DIR__ . '/../source/php');
 // CLI: emulate a web request context for Routes::setPrefix().
 $_SERVER['REQUEST_URI'] = '/';
 
-// index.php defines these constants; replicate for CLI.
-define('VERSION', 'test');
+// index.php defines ABS_PATH; replicate for CLI.
 if ( !defined('ABS_PATH') ) {
     define('ABS_PATH', __DIR__ . '/..');
 }
