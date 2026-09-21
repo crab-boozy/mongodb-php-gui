@@ -1,0 +1,22 @@
+# Routes the public host to oauth2-proxy (ADFS login in front of the app).
+# Replace the Host() placeholder and keep the TLS block consistent with
+# your existing IngressRoutes.
+apiVersion: traefik.io/v1
+kind: IngressRoute
+metadata:
+  name: mongodb-php-gui-oidc
+  labels:
+    app: mongodb-php-gui
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - kind: Rule
+      match: Host(`gui.example.com`) # TODO: your host
+      entryPoints:
+        - websecure
+      services:
+        - name: oauth2-proxy
+          port: 4180
+  # Fill in per your existing IngressRoutes (e.g. a certResolver).
+  tls: {}

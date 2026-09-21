@@ -1,6 +1,6 @@
-# NOTE on scaling: sessions are stored in pod-local files, so keep
-# replicas: 1. Scaling above 1 requires sticky sessions (ingress) or a
-# shared session backend - out of scope for the current release.
+# NOTE on scaling: sessions are pod-local files, so keep replicas: 1.
+# Options for replicas > 1 (Traefik sticky cookie vs shared Redis backend):
+# docs/README.md, "Deployment: scaling and sessions".
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -26,8 +26,9 @@ spec:
           type: RuntimeDefault
       containers:
         - name: app
+          # Our Docker Hub image (published by the Publish image workflow).
           # TODO: pin the image by digest before the production rollout.
-          image: samueltallet/mongodb-php-gui:1.3.3
+          image: boozy1981/mongodb-php-gui:latest
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
