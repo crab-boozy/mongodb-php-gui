@@ -1,0 +1,116 @@
+
+name: Tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+
+    runs-on: ubuntu-latest
+
+    services:
+      mongo:
+        image: mongo:7
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'quit(db.adminCommand({ping:1}).ok ? 0 : 1)'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+    - uses: actions/checkout@v5
+
+    - name: Build image
+      run: docker build -t mongodb-php-gui-app:tests .
+
+    - name: Run in-process test suite
+      run: |
+        # The container runs as non-root (uid 808); make the results dir writable.
+        mkdir -p test-results && chmod 777 test-results
+        docker run --rm --entrypoint php \
+          -v "$PWD/tests":/app/tests \
+          -v "$PWD/test-results":/results \
+          -e MPG_JUNIT=/results/junit-inprocess.xml \
+          mongodb-php-gui-app:tests /app/tests/csrf_routes_test.php
+
+    - name: Start application container
+      run: |
+        docker run -d --name mpg-e2e --network host \
+          -e MPG_ALLOWED_MONGODB_HOSTS=127.0.0.1 \
+          mongodb-php-gui-app:tests
+
+        for i in $(seq 1 30); do
+          if curl -fsS http://127.0.0.1:8080/ready >/dev/null 2>&1; then
+            echo "application is ready"
+            break
+          fi
+          sleep 1
+        done
+
+        curl -fsS http://127.0.0.1:8080/ready
+
+    - name: Run E2E test suite (live MongoDB)
+      run: |
+        docker run --rm --network host --entrypoint php \
+          -e MPG_TEST_MONGO_URI=mongodb://127.0.0.1:27017 \
+          -e MPG_E2E_BASE_URL=http://127.0.0.1:8080 \
+          -v "$PWD/tests":/app/tests \
+          -v "$PWD/test-results":/results \
+          -e MPG_JUNIT=/results/junit-e2e.xml \
+          mongodb-php-gui-app:tests /app/tests/e2e_test.php
+
+    - name: Verify E2E mutations reached the audit log
+      run: |
+        docker logs mpg-e2e > /tmp/mpg-audit.log 2>&1
+        failures=0
+        cases=""
+        for op in collection.create document.insert_one document.update_one document.delete_one document.import collection.drop; do
+          if grep -q "MPG audit | op=$op db=mpgtest coll=t8 result=success" /tmp/mpg-audit.log; then
+            cases="$cases  <testcase name=\"audit: $op\" time=\"0\"/>"$'\n'
+          else
+            failures=$((failures + 1))
+            cases="$cases  <testcase name=\"audit: $op\" time=\"0\"><failure message=\"missing audit line\"/></testcase>"$'\n'
+            echo "missing audit line for $op"
+          fi
+        done
+        # Access logging is disabled by design (static nginx.conf):
+        # combined-format lines "<ip> - - [date] ..." must be absent.
+        if grep -q '^127\.0\.0\.1 - - \[' /tmp/mpg-audit.log; then
+          failures=$((failures + 1))
+          cases="$cases  <testcase name=\"audit: no access log lines\" time=\"0\"><failure message=\"nginx access log lines found (access log must stay off)\"/></testcase>"$'\n'
+          echo "nginx access log lines found in container output"
+        else
+          cases="$cases  <testcase name=\"audit: no access log lines\" time=\"0\"/>"$'\n'
+        fi
+        {
+          echo '<?xml version="1.0" encoding="UTF-8"?>'
+          echo "<testsuite name=\"audit\" tests=\"7\" failures=\"$failures\" time=\"0\">"
+          printf '%s' "$cases"
+          echo '</testsuite>'
+        } > test-results/junit-audit.xml
+        [ "$failures" -eq 0 ] || exit 1
+        echo "all E2E mutations are audited"
+
+    - name: Publish test results
+      if: always() && hashFiles('test-results/*.xml') != ''
+      uses: dorny/test-reporter@v3
+      with:
+        name: Test suite
+        path: test-results/*.xml
+        reporter: java-junit
+        fail-on-error: false
+
+    - name: Upload test results
+      if: always()
+      uses: actions/upload-artifact@v6
+      with:
+        name: test-results
+        path: test-results/*.xml
+
+    - name: Stop application container
+      if: always()
+      run: docker rm -f mpg-e2e || true

@@ -3,6 +3,7 @@ node_modules/
 package-lock.json
 *.wip
 Plan.md
+test-results/
 
 # optional corporate CAs for the build (build-certs/)
 build-certs/*

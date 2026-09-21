@@ -40,8 +40,7 @@ services:
       MPG_SERVER_SELECTION_TIMEOUT_MS: "5000"
       MPG_CONNECT_TIMEOUT_MS: "5000"
       MPG_SOCKET_TIMEOUT_MS: "10000"
-      MPG_MAX_IMPORT_SIZE: "10485760"
-      MPG_MAX_IMPORT_DOCUMENTS: "10000"
+      # Import limits are fixed in the image (50MB / 100k documents).
       # "1" only behind TLS (K8s/ingress); dev over http keeps "0".
       MPG_COOKIE_SECURE: "0"
       MPG_DEBUG: "0"
