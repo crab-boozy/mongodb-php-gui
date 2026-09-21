@@ -143,24 +143,28 @@ jobs:
 
       - name: Determine image tags
         id: tags
+        # build-push-action expects full image references (repo/tag),
+        # not bare tags: a bare name would push to the reserved
+        # docker.io/library/ namespace and fail with "denied".
         run: |
+          image="boozy1981/mongodb-php-gui"
           if [ "$GITHUB_REF" = "refs/heads/master" ]; then
             if [ -n "${{ github.event.inputs.tag }}" ]; then
-              echo "tags=${{ github.event.inputs.tag }},latest" >> "$GITHUB_OUTPUT"
+              echo "tags=$image/${{ github.event.inputs.tag }},$image/latest" >> "$GITHUB_OUTPUT"
               echo "Image tags: ${{ github.event.inputs.tag }}, latest"
             else
-              echo "tags=master-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+              echo "tags=$image/master-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
               echo "Image tags: master-${GITHUB_SHA::7}"
             fi
           elif [ "${{ startsWith(github.ref, 'refs/tags/') }}" = "true" ]; then
             echo "Tag input is ignored for tag refs; republishing the version this tag points to."
-            echo "tags=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+            echo "tags=$image/${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
             echo "Image tags: ${GITHUB_REF_NAME#v}"
           else
             if [ -n "${{ github.event.inputs.tag }}" ]; then
               echo "WARNING: tag input is ignored on non-master branches; publishing dev-<short-sha>."
             fi
-            echo "tags=dev-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+            echo "tags=$image/dev-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
             echo "Image tags: dev-${GITHUB_SHA::7}"
           fi
 
