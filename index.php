@@ -6,8 +6,6 @@ use Nimbly\Limber\Application;
 use Nimbly\Capsule\Factory\ServerRequestFactory;
 use Nimbly\Limber\Exceptions\NotFoundHttpException;
 
-const VERSION = '1.3.3';
-
 /**
  * Absolute path, without trailing slash.
  * Example: /app
