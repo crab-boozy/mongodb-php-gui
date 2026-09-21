@@ -12,14 +12,14 @@ on:
   release:
     types: [published]
   # The only way to publish an image. Tag rules (tag input in parentheses):
-  #   master branch + tag "1.0.0" -> 1.0.0 + latest
+  #   master branch + tag "1.0.0" -> 1.0.0
   #   master branch + empty       -> master-<short-sha>
   #   any other branch            -> dev-<short-sha>    (tag input ignored)
-  #   a tag ref, e.g. v1.0.0      -> 1.0.0, no latest  (tag input ignored)
+  #   a tag ref, e.g. v1.0.0      -> 1.0.0 (restore path, tag input ignored)
   workflow_dispatch:
     inputs:
       tag:
-        description: "Version tag, master only: empty -> master-<short-sha>; other branches -> dev-<short-sha>; a tag ref republishes its version."
+        description: "Version tag, master -> master-<short-sha>; other branches -> dev-<short-sha>."
         required: false
         default: ""
 
@@ -144,15 +144,19 @@ jobs:
         run: |
           image="boozy1981/mongodb-php-gui"
           if [ "$GITHUB_REF" = "refs/heads/master" ]; then
-            if [ -n "${{ github.event.inputs.tag }}" ]; then
-              echo "tags=$image:${{ github.event.inputs.tag }},$image:latest" >> "$GITHUB_OUTPUT"
-              echo "Image tags: ${{ github.event.inputs.tag }}, latest"
+            tag="${{ github.event.inputs.tag }}"
+            if [ -n "$tag" ]; then
+              # Tagging convention: git tags carry "v" (v1.0.0), image tags
+              # do not (1.0.0) - strip a leading "v" from the input.
+              tag="${tag#v}"
+              echo "tags=$image:$tag" >> "$GITHUB_OUTPUT"
+              echo "Image tags: $tag"
             else
               echo "tags=$image:master-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
               echo "Image tags: master-${GITHUB_SHA::7}"
             fi
           elif [ "${{ startsWith(github.ref, 'refs/tags/') }}" = "true" ]; then
-            echo "Tag input is ignored for tag refs; republishing the version this tag points to."
+            echo "Tag input is ignored for tag refs; restoring the version this tag points to (fails if the tag already exists on Docker Hub, immutable tags)."
             echo "tags=$image:${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
             echo "Image tags: ${GITHUB_REF_NAME#v}"
           else

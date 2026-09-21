@@ -102,19 +102,23 @@ The image is published to Docker Hub as `boozy1981/mongodb-php-gui`:
 
 | Tag | Meaning |
 | --- | --- |
-| `boozy1981/mongodb-php-gui:<version>` | Versioned build, e.g. `1.0.0`. |
-| `boozy1981/mongodb-php-gui:latest` | The most recently published build. |
+| `boozy1981/mongodb-php-gui:<version>` | Versioned build, e.g. `1.0.0`. The tag to pin in your deployment (a digest for production). |
+| `boozy1981/mongodb-php-gui:master-<short-sha>` / `…:dev-<short-sha>` | Scratch builds for CI checks; not intended for deployment. |
+
+The `latest` tag is not published.
 
 Publishing is **manual only** and gated by the full test suite (in-process + E2E against a live MongoDB + audit checks — the publish steps only run when they all pass, and only on a manual run). Actions → `CI` → Run workflow: pick a ref and, optionally, a version tag:
 
 | Ref picked in the dialog | `tag` field | Docker Hub tags |
 | --- | --- | --- |
-| `master` | `1.0.0` | `1.0.0` + `latest` |
+| `master` | `1.0.0` | `1.0.0` |
 | `master` | *(empty)* | `master-<short-sha>` |
 | any other branch | *(ignored)* | `dev-<short-sha>` |
-| a tag, e.g. `v1.0.0` | *(ignored)* | `1.0.0` (the version without `v`; `latest` is not touched) |
+| a tag, e.g. `v1.0.0` | *(ignored)* | `1.0.0` (the version without `v`; restore path — fails if the tag already exists on Docker Hub, immutable tags) |
 
-Only an explicit version tag from `master` updates `latest`. Creating a GitHub release (UI or `gh release create v1.0.0`) runs the test suite on the release commit only — it never publishes an image. The publish steps need the repository secrets `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN`.
+Tagging convention: GitHub release tags carry the `v` prefix (`v1.0.0`), image tags do not (`1.0.0`). In the Run workflow `tag` field the leading `v` is optional — it is stripped automatically.
+
+Creating a GitHub release (UI or `gh release create v1.0.0`) runs the test suite on the release commit only — it never publishes an image. The publish steps need the repository secrets `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN`.
 
 ## Deployment: OIDC (ADFS)
 

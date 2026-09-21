@@ -26,9 +26,10 @@ spec:
           type: RuntimeDefault
       containers:
         - name: app
-          # Our Docker Hub image (published by the Publish image workflow).
+          # Our Docker Hub image; published manually via Actions -> CI.
+          # Update the version tag on each release.
           # TODO: pin the image by digest before the production rollout.
-          image: boozy1981/mongodb-php-gui:latest
+          image: boozy1981/mongodb-php-gui:0.0.9
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
