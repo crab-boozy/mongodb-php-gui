@@ -24,7 +24,7 @@ on:
         default: ""
 
 jobs:
-  test:
+  build-and-test:
     runs-on: ubuntu-latest
 
     services:
@@ -132,20 +132,15 @@ jobs:
         if: always()
         run: docker rm -f mpg-e2e || true
 
-  publish:
-    # Manual only: runs on workflow_dispatch after the test job is green.
-    needs: test
-    if: github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v5
-
+      # Publishing: manual only (workflow_dispatch). The image was built
+      # earlier in this same job on the same runner, so it is retagged
+      # and pushed as-is - no second build.
       - name: Determine image tags
+        if: github.event_name == 'workflow_dispatch'
         id: tags
-        # build-push-action expects full image references (repo/tag),
-        # not bare tags: a bare name would push to the reserved
-        # docker.io/library/ namespace and fail with "denied".
+        # Docker Hub expects full image references (repo:tag), not bare
+        # tags: a bare name would push to the reserved docker.io/library/
+        # namespace and fail with "denied".
         run: |
           image="boozy1981/mongodb-php-gui"
           if [ "$GITHUB_REF" = "refs/heads/master" ]; then
@@ -169,16 +164,17 @@ jobs:
           fi
 
       - name: Login to Docker Hub
+        if: github.event_name == 'workflow_dispatch'
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Build and push
-        # No type=gha cache: the default buildx driver on the runners is
-        # "docker", which cannot export to the GHA cache backend.
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          push: true
-          tags: ${{ steps.tags.outputs.tags }}
+      - name: Tag and push image
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          IFS=',' read -ra refs <<< "${{ steps.tags.outputs.tags }}"
+          for ref in "${refs[@]}"; do
+            docker tag mongodb-php-gui-app:ci "$ref"
+            docker push "$ref"
+          done

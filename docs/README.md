@@ -105,7 +105,7 @@ The image is published to Docker Hub as `boozy1981/mongodb-php-gui`:
 | `boozy1981/mongodb-php-gui:<version>` | Versioned build, e.g. `1.0.0`. |
 | `boozy1981/mongodb-php-gui:latest` | The most recently published build. |
 
-Publishing is **manual only** and gated by the full test suite (in-process + E2E against a live MongoDB + audit checks — the publish job only runs when they all pass). Actions → `CI` → Run workflow: pick a ref and, optionally, a version tag:
+Publishing is **manual only** and gated by the full test suite (in-process + E2E against a live MongoDB + audit checks — the publish steps only run when they all pass, and only on a manual run). Actions → `CI` → Run workflow: pick a ref and, optionally, a version tag:
 
 | Ref picked in the dialog | `tag` field | Docker Hub tags |
 | --- | --- | --- |
@@ -114,7 +114,7 @@ Publishing is **manual only** and gated by the full test suite (in-process + E2E
 | any other branch | *(ignored)* | `dev-<short-sha>` |
 | a tag, e.g. `v1.0.0` | *(ignored)* | `1.0.0` (the version without `v`; `latest` is not touched) |
 
-Only an explicit version tag from `master` updates `latest`. Creating a GitHub release (UI or `gh release create v1.0.0`) runs the test suite on the release commit only — it never publishes an image. The publish job needs the repository secrets `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN`.
+Only an explicit version tag from `master` updates `latest`. Creating a GitHub release (UI or `gh release create v1.0.0`) runs the test suite on the release commit only — it never publishes an image. The publish steps need the repository secrets `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN`.
 
 ## Deployment: OIDC (ADFS)
 
