@@ -1,0 +1,103 @@
+# OIDC front door for the MongoDB PHP GUI (ADFS as the provider).
+# Apply: kubectl -n <namespace> apply -f k8s/oidc/
+# The app keeps its own login (MongoDB credentials); oauth2-proxy only
+# gates access to the public host.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: oauth2-proxy
+  labels:
+    app: oauth2-proxy
+type: Opaque
+stringData:
+  # 32 random bytes, e.g.: head -c 32 /dev/urandom | base64
+  COOKIE_SECRET: "CHANGE_ME"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: oauth2-proxy
+  labels:
+    app: oauth2-proxy
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: oauth2-proxy
+  template:
+    metadata:
+      labels:
+        app: oauth2-proxy
+    spec:
+      containers:
+        - name: oauth2-proxy
+          # TODO: pin the image by digest before the production rollout.
+          image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.4
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 4180
+              protocol: TCP
+          env:
+            - name: PROVIDER
+              value: oidc
+            # ADFS issuer URL. The trailing slash is mandatory.
+            - name: OIDC_ISSUER_URL
+              value: "https://adfs.example.com/adfs/ls/" # TODO: your ADFS (Windows Server 2019+)
+            # Must match the -ClientId of the registered ADFS OAuth2 client.
+            - name: CLIENT_ID
+              value: "urn:adfs:sp:example.com:mongodb-php-gui" # TODO
+            # ADFS does not issue a client secret for OIDC clients:
+            # do not set CLIENT_SECRET.
+            # Must be exactly https://<host>/oauth2/callback, where <host>
+            # is the IngressRoute host. A mismatch causes a redirect loop.
+            - name: REDIRECT_URL
+              value: "https://gui.example.com/oauth2/callback" # TODO
+            - name: COOKIE_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: oauth2-proxy
+                  key: COOKIE_SECRET
+            # Optional: restrict logins to your domain(s), comma-separated.
+            # - name: EMAIL_DOMAIN
+            #   value: "example.com"
+            # Everything that passes the OIDC check is proxied to the app.
+            - name: UPSTREAMS
+              value: "http://mongodb-php-gui:8080"
+          livenessProbe:
+            httpGet:
+              path: /ping
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /ping
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              cpu: 100m
+              memory: 128Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: oauth2-proxy
+  labels:
+    app: oauth2-proxy
+spec:
+  type: ClusterIP
+  selector:
+    app: oauth2-proxy
+  ports:
+    - name: http
+      port: 4180
+      targetPort: http
+      protocol: TCP
